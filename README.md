@@ -66,24 +66,20 @@ flowchart TD
 
 ```
 karar_destek_sistemi/
-├── api.py                      # FastAPI REST API (React arayüzünün konuştuğu tek katman)
+├── api.py                    
 ├── src/
-│   ├── core/                   # Neo4j bağlantısı, Pydantic şeması, karar motoru, coğrafi kilitler
+│   ├── core/                   
 │   │   ├── models.py
 │   │   ├── database.py
 │   │   ├── decision_engine.py
 │   │   ├── environmental_context.py
 │   │   └── turkiye_harita.py
-│   ├── data_ingestion/         # Text→Graph LLM ayrıştırıcı + OSM/idari sınır yükleyicileri
-│   └── ui/                     # (Eski/ikincil) Streamlit gösterge paneli
-├── karavul_ui/                 # ★ Asıl arayüz — React 19 + Vite + MapLibre
-├── mlops/                      # Sürekli öğrenme boru hattı (orchestrator, eval, kırmızı takım)
-│   └── golden_dataset/         # 1000 örnekli elle tasarlanmış eğitim seti üreticisi
-├── docs/
-│   └── akademik_proje_raporu.md
-├── tests/
-│   └── ui_screenshots/         # Canlı UI vitrin testlerinin kanıt görüntüleri
-├── docker-compose.yml          # Neo4j + Ollama + (Streamlit) tek komutla ayağa kalkış
+│   ├── data_ingestion/         
+│   └── ui/                     #
+├── karavul_ui/                 
+├── mlops/                      
+│   └── golden_dataset/         
+├── docker-compose.yml          
 └── requirements.txt
 ```
 
