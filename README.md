@@ -1,6 +1,6 @@
 # 🛰️ KARAVUL — Kriz ve Afet Yönetimi Karar Destek Sistemi
 
-**Karavul, bir aktör değil bir kurmaydır.** Karar vermez, kararı hızlandırır; elindeki veriyi asla aşmaz ve bilmediği şeyi asla uydurmaz.
+**Karavul, karar vermez, kararı hızlandırır; elindeki veriyi asla aşmaz ve bilmediği şeyi asla uydurmaz.
 
 Karavul; Türkiye çapında (81 il, sokak seviyesi coğrafi çözünürlükte) çalışan, serbest metin kriz raporlarını bir **Neo4j Bilgi Grafı**na işleyen, bu graf üzerinde **GraphRAG** yöntemiyle en yakın/en yetenekli müdahale birliğini arayan ve yerel olarak barındırılan, **QLoRA ile ince ayarlanmış** bir büyük dil modeli (`karavul-kurmay`) ile 4 başlıklı taktiksel öneri (Durum Sentezi / Hareket Tarzları / Kritik Darboğazlar / Karar-Onay Noktası) üreten bir karar destek sistemidir. Kapalı-devre (air-gapped) TSK/AFAD/UMKE dağıtımı hedefiyle, tamamen yerel/çevrimdışı çalışacak şekilde tasarlanmıştır.
 
