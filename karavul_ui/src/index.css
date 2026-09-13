@@ -1,0 +1,123 @@
+@import "tailwindcss";
+/* "Faz 6: 3B Taktiksel Harita" — react-leaflet SÖKÜLDÜ, yerine WebGL
+   tabanlı `react-map-gl`/`maplibre-gl` geldi (bkz. `MapView.tsx`);
+   `maplibre-gl/dist/maplibre-gl.css` component-içinde import edilir. */
+
+/* KARAVUL — Taktiksel Komuta Merkezi
+   Tema: tam koyu, füme/antrasit zemin, sadece kriz/rota renkleri vurgu. */
+@theme {
+  --color-cmd-950: #0a0e17;
+  --color-cmd-900: #0f172a;
+  --color-cmd-850: #121826;
+  --color-cmd-800: #18181b;
+  --color-cmd-700: #20242f;
+  --color-cmd-600: #2a3142;
+  --color-cmd-border: #262e42;
+
+  --color-ink-100: #e5e7eb;
+  --color-ink-300: #9ca3af;
+  --color-ink-500: #6b7280;
+
+  --color-crisis-500: #ef4444;
+  --color-crisis-400: #f87171;
+  --color-alert-500: #f59e0b;
+  --color-alert-400: #fbbf24;
+  --color-tactical-500: #38bdf8;
+  --color-tactical-400: #7dd3fc;
+  --color-ready-500: #22c55e;
+  --color-ready-400: #4ade80;
+
+  --font-sans: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  /* "SUNUM CİLASI": başlık/panel-etiketi/HUD rakamlarında kullanılan
+     köşeli, taktiksel bir gösterge yazı tipi — gövde metninden BİLİNÇLİ
+     olarak ayrılır ki komuta merkezi hissi güçlensin (bkz. `index.html`
+     Google Fonts bağlantısı). */
+  --font-display: "Rajdhani", var(--font-sans);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-cmd-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* MapLibre GL: karargah temasına uydur — varsayılan açık zemin/kontrol
+   stilleri görünmesin (react-leaflet'teki AYNI amaçlı override'ın MapLibre
+   karşılığı). */
+.maplibregl-map {
+  background: var(--color-cmd-950);
+  font-family: var(--font-sans);
+}
+.maplibregl-ctrl-attrib {
+  background: rgba(10, 14, 23, 0.7) !important;
+  color: var(--color-ink-500) !important;
+  font-size: 10px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--color-ink-300) !important;
+}
+.maplibregl-ctrl-group {
+  background: rgba(18, 24, 38, 0.9) !important;
+  border: 1px solid var(--color-cmd-border) !important;
+}
+.maplibregl-ctrl-group button {
+  background: transparent !important;
+}
+.maplibregl-ctrl-group button:hover {
+  background: var(--color-cmd-700) !important;
+}
+.maplibregl-ctrl-icon {
+  filter: invert(1) brightness(1.6);
+}
+
+/* İnce, karargah-tipi kaydırma çubuğu (panel içerikleri için). */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--color-cmd-600);
+  border-radius: 3px;
+}
+
+/* Nabız (pulse) animasyonu — kritik olay işaretçileri için. */
+@keyframes karavul-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(239, 68, 68, 0);
+  }
+}
+.karavul-pulse-marker {
+  animation: karavul-pulse 1.8s ease-out infinite;
+}
+
+/* "SUNUM CİLASI" — komuta-merkezi HUD hissi veren, TAMAMEN dekoratif
+   (pointer-events: none, MapView'in ÜZERİNDE ama panellerin ALTINDA,
+   bkz. `App.tsx`daki z-index sırası) sabit katmanlar. Çok düşük opaklıkta
+   tutulur ki hem koyu hem parlak harita bölgelerinde okunabilirlik
+   ASLA bozulmasın — amaç "oyunlaştırmak" değil, kurumsal derinlik
+   hissi eklemek. */
+.hud-topscrim {
+  background: linear-gradient(to bottom, rgba(10, 14, 23, 0.55) 0%, rgba(10, 14, 23, 0) 100%);
+}
+.hud-vignette {
+  background: radial-gradient(ellipse at center, rgba(10, 14, 23, 0) 55%, rgba(10, 14, 23, 0.45) 100%);
+}

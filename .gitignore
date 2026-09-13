@@ -1,0 +1,76 @@
+# Gercek sirlar — repoya ASLA commit edilmemeli (bkz. .dockerignore'daki AYNI gerekce).
+.env
+.streamlit/secrets.toml
+
+# Python calisma zamani artiklari
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+
+# Yerel veri / log kalintilari — turkey-latest.osm.pbf (~640 MB) gibi devasa
+# harita dosyalari git'e ASLA girmemeli (bkz. seed_db.py — bu dosya yerel
+# diskte ayrica saglanir, kod deposunun parcasi degildir).
+*.log
+*_log.txt
+scratchpad/
+data/
+
+# Faz 8 (Fine-Tuning) egitim/donusum artiklari — buyuk ikili dosyalar,
+# git'e girmemeli (bkz. train_model.py / test_merge_infer.py). Ollama'nin
+# kendi model deposunda (`ollama list`) zaten saklaniyorlar.
+karavul_kurmay_lora/
+karavul_kurmay_merged/
+outputs/
+unsloth_compiled_cache/
+
+# "AKADEMIK SUNUM HAZIRLIGI" (v1.0 donma — kullanici talebi): asagidaki
+# desenler, yukaridaki KLASOR-bazli kurallarin OTESINDE, herhangi bir
+# konumda (ileride farkli bir egitim turu/klasor adiyla) turetilebilecek
+# AGIRLIK/model dosyalarini VE buyuk veri setlerini GENEL olarak yakalar —
+# repo'nun "hoca'ya gonderilecek profesyonel paket" olma hedefiyle, TEK bir
+# .gguf/.safetensors/.jsonl bile YANLISLIKLA commit edilmemeli.
+*.gguf
+*.safetensors
+*.bin
+*_lora/
+*_merged/
+*.jsonl
+checkpoint-*/
+
+# React arayuzu (karavul_ui) KENDI .gitignore'unu (node_modules/, dist/)
+# ZATEN tasir — burada TEKRAR edilmez (git nested .gitignore'lari native
+# destekler); bu satir SADECE bu bilinçli tercihi belgelemek icindir.
+
+# MLOps ("Sürekli Öğrenme" döngüsü — bkz. mlops/README.md) çalışma zamanı
+# artıkları: state.json makine-yerel bir sayaçtır, reports/ ise HAM LLM
+# çıktıları içeren (bazen uzun/gürültülü) otomatik değerlendirme raporlarıdır
+# — ikisi de git'e girmemeli. Dinamik olarak üretilen Modelfile'lar da aynı
+# şekilde (bkz. orchestrator.py `_uretilen_Modelfile_*`).
+mlops/state.json
+mlops/CYCLE_LOG.md
+mlops/reports/
+mlops/_uretilen_Modelfile_*
+
+# IDE
+.vscode/
+.idea/
+
+# "SADECE HAM KOD" REPO POLİTİKASI: sunum/rapor/oturum-notu/ekran görüntüsü
+# gibi kod OLMAYAN dosyalar bilinçli olarak repo dışında tutulur — bunlar
+# yerel diskte kalmaya devam eder, sadece git'e commit edilmezler.
+*.pptx
+*.docx
+/AI_MEMORY.md
+/gece_raporu.md
+/docs/akademik_proje_raporu.md
+/tests/ui_screenshots/
+/test_*.py
+/ekran/

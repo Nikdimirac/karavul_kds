@@ -1,0 +1,58 @@
+# Kriz ve Afet Yönetimi Karar Destek Sistemi — üretim bağımlılıkları
+#
+# Sürümler, geliştirme ortamında `pip freeze` ile doğrulanmış GERÇEK
+# sürümlere SABİTLENMİŞTİR (==). Kapalı devre (on-premise) TSK/AFAD/UMKE
+# dağıtımlarında "bugün çalışıyor, yarın (sessizce güncellenen bir bağımlılık
+# yüzünden) çalışmıyor" riskini ortadan kaldırmak için pinleme ZORUNLUDUR —
+# bkz. Dockerfile (bu dosya `pip install -r requirements.txt` ile
+# imaj build anında kilitlenir, konteyner her ayağa kalkışında AYNI
+# sürümleri kullanır).
+neo4j==6.2.0
+pydantic==2.12.5
+python-dotenv==1.2.2
+requests==2.34.2
+streamlit==1.59.2
+
+# "FAZ 5: TİCARİ ÜRÜN MİMARİSİ" (kullanıcı talebi — bkz. `api.py`): kriz
+# motorunu (decision_engine.py/database.py, DEĞİŞTİRİLMEDEN) dışarıdan HTTP
+# ile erişilebilir kılan bağımsız REST API sarmalayıcısı. `uvicorn` bu
+# ortamda ZATEN kuruluydu (0.49.0); `fastapi` burada eklendi.
+fastapi==0.141.1
+uvicorn==0.49.0
+langchain==1.3.15
+langchain-community==0.4.2
+langchain-core==1.5.4
+pydeck==0.9.3
+pandas==3.0.3
+tqdm==4.68.3
+
+# "ULUSAL ÖLÇEKLİ ESNEKLİK" (kullanıcı talebi — Dinamik Geocoding Fallback,
+# bkz. `src.core.database.Neo4jConnection.harici_geokodlama_ile_koordinat_
+# bul`): LLM'in çıkardığı bir kriz konumu YEREL Street/Bridge verisiyle
+# (ne doğrudan ne "Coğrafi Bağlama" ile) eşleşmediğinde SON ÇARE olarak
+# Nominatim (OpenStreetMap'in halka açık geocoding servisi) sorgulanır.
+# DÜRÜST UYARI (bu dosyanın en üstündeki "Kapalı devre (on-premise)"
+# ilkesiyle GERÇEK bir GERİLİM içerir): bu tek bağımlılık, projenin
+# geri kalanının AKSİNE (Ollama yerel, Neo4j yerel, OSM verisi önceden
+# indirilmiş) ÇALIŞMA ANINDA İNTERNETE ihtiyaç duyar ve Nominatim'in halka
+# açık kullanım politikasına (saniyede en fazla 1 istek, ağır/ticari
+# kullanım YASAK) tabidir. Gerçek bir kapalı-devre (air-gapped) TSK/AFAD/
+# UMKE dağıtımında bu servisin KENDİ sunucunuzda self-host edilen bir
+# Nominatim örneğine (yerel OSM extract'iyle) yönlendirilmesi ŞİDDETLE
+# ÖNERİLİR — kod, `Nominatim(user_agent=...)` çağrısında `domain=` parametresi
+# ile bu şekilde yapılandırılabilir (bkz. ilgili fonksiyonun docstring'i).
+# Bu servis kullanılamazsa (ağ yok/timeout/self-host adresi yanlış), sistem
+# ASLA çökmez — sadece bu SON ÇARE adımı atlanır ve mevcut (yerel-veri-
+# tabanlı) reddetme davranışına geri döner.
+geopy==2.5.0
+
+# osmium: `src/data_ingestion/local_osm_reader.py`'nin "Kademeli Dinamik
+# Yükleme" (Tiered Dynamic Loading) mimarisi için YEREL (.osm/.osm.pbf)
+# dosya okuyucusu — `geopy`nin AKSİNE bu paket ÇALIŞMA ANINDA İNTERNETE
+# İHTİYAÇ DUYMAZ (tamamen "Yerel Çevrimdışı Depo" / offline-first
+# felsefesiyle uyumludur, kapalı-devre TSK/AFAD/UMKE dağıtımına uygundur).
+# PyPI'daki paket adı `osmium`dur (`pyosmium` DEĞİL — o isim bu ortamda
+# kurulum HATASI verdi; `pyrosm` de C++ Build Tools eksikliğinden
+# kurulamadı). Windows'ta pip ile doğrudan kurulabilen, önceden derlenmiş
+# (wheel) hâli test edilip DOĞRULANMIŞTIR.
+osmium==4.3.1
