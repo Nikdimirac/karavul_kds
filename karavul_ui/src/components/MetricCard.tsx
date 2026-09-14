@@ -8,9 +8,6 @@ const VURGU_STIL: Record<Vurgu, string> = {
   hazir: 'text-ready-400',
 }
 
-// Kart sol kenarındaki ince vurgu çubuğu — HUD panellerindeki tek renkli
-// "durum şeridi" konvansiyonuna uyar, kartlar arasındaki tarama (scan)
-// hiyerarşisini güçlendirir.
 const VURGU_KENAR: Record<Vurgu, string> = {
   notr: 'bg-ink-500/60',
   kriz: 'bg-crisis-500',
@@ -24,7 +21,6 @@ interface MetricCardProps {
   vurgu?: Vurgu
 }
 
-/** Tek bir taktiksel metrik kartı — ikon + değer + kısa etiket, açıklama YOK. */
 export default function MetricCard({ icon: Icon, label, value, vurgu = 'notr' }: MetricCardProps) {
   return (
     <div className="relative flex items-center gap-3 overflow-hidden rounded-lg border border-cmd-border/80 bg-cmd-900/75 py-2 pl-3.5 pr-4 shadow-lg shadow-black/40 backdrop-blur-md">
