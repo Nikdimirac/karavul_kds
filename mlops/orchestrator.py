@@ -1,66 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-mlops/orchestrator.py
-======================
-KARAVUL — "SÜREKLİ ÖĞRENME" DÖNGÜSÜNÜN TEK GİRİŞ NOKTASI.
 
-Kullanıcı talebiyle eklendi ("otomatik olarak yeni kriz senaryoları üretip
-modeli eğitecek bir MLOps/otomasyon altyapısı kur"). Kullanıcının onayladığı
-İKİ mimari karar (bkz. oturum kaydı + `mlops/config.py` başlığı):
-
-  1. "KAPILI (onaylı) geçiş" — bu betik canlı `karavul-kurmay` Ollama
-     etiketine ASLA yazmaz; en fazla `karavul-kurmay-candidate` adlı AYRI
-     bir etikete kadar gider. Canlıya geçiş SADECE `promote_candidate.py`
-     ile, insan onayıyla yapılır.
-  2. "Zamanlamayı ben tetikleyeceğim" — bu betiğe HİÇBİR Windows Görev
-     Zamanlayıcı kaydı EKLENMEZ; SADECE elle (`python -m mlops.orchestrator`)
-     çalıştırılır.
-
-BİR TUR NE YAPAR (sırayla):
-  A) Ön koşul kontrolü — `api.py`/Neo4j/Ollama ayakta mı? (bkz. proje
-     genelindeki "asla sessizce yutma" ilkesi — biri ayakta değilse betik
-     AÇIKÇA nedenini yazıp çıkar, YARIM bir döngüyü SESSİZCE atlamaz.)
-  B) VERİ TOPLAMA — `war_gaming.py`yi bir ALT SÜREÇ olarak, bu turluk küçük
-     bir kotayla (`--senaryo-sayisi`, varsayılan 20) çalıştırır; GPU
-     kontrolü YAPILMAZ (bkz. `gpu_check.py` docstring'i — bu adımın GPU
-     yükü, normal API kullanımıyla ZATEN aynı büyüklüktedir, engelleyici
-     DEĞİLDİR).
-  C) EŞİK KONTROLÜ — son eğitimden bu yana dataset'e eklenen GEÇERLİ örnek
-     sayısı `config.YENI_ORNEK_ESIGI`yi AŞMADIYSA burada durur (sadece veri
-     toplamış olur — bu NORMAL ve BEKLENEN bir çıktıdır, hata DEĞİLDİR).
-  D) GPU BOŞTA MI? — eşik aşıldıysa, AĞIR eğitim adımından ÖNCE
-     `gpu_check.gpu_bosta_mi()` ile doğrulanır; meşgulse (ör. Kurucu bir
-     oyun oynuyor) bu TUR burada durur, BİR SONRAKİ elle tetiklemede
-     yeniden denenir — veri toplama adımı (B) ZATEN tamamlanmış olduğundan
-     KAYIP yoktur.
-  E) EĞİTİM → MERGE → GGUF İÇE AKTARMA — sırasıyla `train_model.py`,
-     `test_merge_infer.py` (rope_theta düzeltmesi OTOMATİK uygulanır, bkz.
-     o betiğin docstring'i) — İKİSİ DE `mlops.config.TRAIN_PYTHON_EXE`
-     (ayrı `karavul` conda ortamının python.exe'si, `conda` KABUĞUNA
-     GİRMEDEN doğrudan yol olarak bulunur — bkz. o sabitin docstring'i)
-     İLE çalıştırılır; bu betiğin KENDİSİNİ çalıştıran yorumlayıcıdan
-     (`sys.executable`, `neo4j`/`dotenv` gerektiğinden sistem Python'ı
-     OLMALI) BİLİNÇLİ OLARAK FARKLI — o ortamda unsloth/torch>=2.4 YOK.
-     (ESKİDEN `conda run -n karavul ...` kullanılıyordu — Windows'ta
-     `conda` PATH'te olmadığından `[WinError 2]` ile patlıyordu; sonra
-     KISA süreliğine yanlışlıkla `sys.executable`a değiştirildi — bu da
-     `orchestrator.py`nin kendisi `neo4j` gerektirdiğinden ÇALIŞMADI, bkz.
-     `config.py::_egitim_python_yolu_bul` docstring'i.) sonra
-     `ollama create` ile ÖNCE F16 ara etiket, SONRA q4_K_M candidate etiketi
-     üretilir (bkz. proje kökü `Modelfile`/`Modelfile.quant`teki KANITLANMIŞ
-     İKİ AŞAMALI desenin AYNISI — tek adıma "sadeleştirilmedi" ki daha önce
-     doğrulanmış davranıştan SAPILMASIN).
-  F) DEĞERLENDİRME — `eval_harness.py` adayı üretimle KARŞILAŞTIRIR, bir
-     Markdown rapor yazar.
-  G) DURUM/GÜNLÜK — `state.json` ve `CYCLE_LOG.md` güncellenir; kullanıcıya
-     TEK SATIRLIK, net bir "sıradaki adım senin" özeti basılır.
-
-Kullanım:
-    python -m mlops.orchestrator                     # varsayılan tur
-    python -m mlops.orchestrator --senaryo-sayisi 40  # bu turda daha çok veri topla
-    python -m mlops.orchestrator --sadece-veri        # eğitim adımını hiç deneme
-    python -m mlops.orchestrator --egitimi-zorla      # eşik dolmamış olsa bile eğit
-"""
 
 from __future__ import annotations
 
@@ -73,16 +11,14 @@ from typing import List, Optional
 
 import requests
 
-# bkz. `eval_harness.py`deki AYNI korumanın AYNI gerekçesi (Windows konsolu
-# + emoji/Türkçe karakter -> UnicodeEncodeError).
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mlops import eval_harness  # noqa: E402
-from mlops.config import (  # noqa: E402
+from mlops import eval_harness  
+from mlops.config import (  
     API_TABAN_URL,
     CANDIDATE_F16_TAG,
     CANDIDATE_TAG,
@@ -98,20 +34,14 @@ from mlops.config import (  # noqa: E402
     VERI_SETI_DOSYASI,
     YENI_ORNEK_ESIGI,
 )
-from mlops.gpu_check import gpu_bosta_mi  # noqa: E402
-from mlops.state import durumu_kaydet, durumu_yukle, simdi_utc_iso  # noqa: E402
+from mlops.gpu_check import gpu_bosta_mi  
+from mlops.state import durumu_kaydet, durumu_yukle, simdi_utc_iso  
 
 VARSAYILAN_SENARYO_SAYISI = 20
-EGITIM_ZAMAN_ASIMI_SANIYE = 4 * 60 * 60  # 4 saat — QLoRA + merge için CÖMERT ama SINIRLI bir tavan
+EGITIM_ZAMAN_ASIMI_SANIYE = 4 * 60 * 60  
 QUICK_TIMEOUT = 20
 
-# 2026-09-11'de train_model.py::SYSTEM_PROMPT ile SENKRONİZE edildi (Golden
-# Dataset'in "KDS aktör değil danışman" ilkesi) — bu metin Ollama Modelfile'ının
-# SYSTEM alanına gömülür, yani ADAY MODELİN gerçek çalışma zamanı davranışını
-# belirler. Eski ("askeri lojistik emirleri üret") haliyle bırakılsaydı, model
-# eğitim verisinin (danışman üslubu) TAM TERSİ bir kimlikle çalıştırılırdı.
-# NOT: bu üçü (burası, train_model.py, test_merge_infer.py) AYNI metni ELLE
-# tekrarlıyor; biri değişirse ÜÇÜ de değişmeli.
+
 _SYSTEM_PROMPT = (
     "Sen Karavul Kriz ve Afet Yönetimi Karar Destek Sistemi'nin kurmay "
     "zekasısın. Bir EYLEM SİSTEMİ DEĞİLSİN — yetkili insan karar vericiye "
@@ -153,9 +83,7 @@ def _dataset_satir_sayisi() -> int:
 
 
 def _alt_surec_calistir(komut: List[str], *, zaman_asimi: float, ortam_aciklama: str) -> bool:
-    """`True`/`False` başarı durumunu döner; ÇÖKMEZ (asla exception fırlatmaz) —
-    çağıran taraf (bkz. `calistir`) başarısızlığı AÇIKÇA loglayıp döngüyü
-    orada, kontrollü biçimde durdurur."""
+ 
     print(f"  $ {' '.join(komut)}  (ortam: {ortam_aciklama})")
     try:
         sonuc = subprocess.run(komut, cwd=str(MLOPS_DIZINI.parent), timeout=zaman_asimi, check=False)
@@ -172,14 +100,7 @@ def _alt_surec_calistir(komut: List[str], *, zaman_asimi: float, ortam_aciklama:
 
 
 def _egitim_bloğunu_calistir() -> bool:
-    """E adımı — dönüşte `True` ise `karavul-kurmay-candidate` Ollama'da
-    KULLANIMA HAZIRDIR (ama HÂLÂ üretime bağlanmamıştır)."""
-    # BİLİNÇLİ OLARAK `sys.executable` DEĞİL, `TRAIN_PYTHON_EXE` — bu betiği
-    # (`orchestrator.py`) çalıştıran yorumlayıcı `neo4j`/`dotenv` gerektiren
-    # sistem Python'ı OLMALI (bkz. `eval_harness`/`war_gaming` importları),
-    # ama o ortamda unsloth/torch>=2.4 YOK; eğitim alt-süreçleri bu yüzden
-    # HER ZAMAN ayrı `karavul` conda ortamıyla çalıştırılır (bkz.
-    # `mlops/config.py::_egitim_python_yolu_bul` docstring'i).
+   
     egitim_python = str(TRAIN_PYTHON_EXE)
     _adim_basligi("[E1/4] QLoRA fine-tuning (%s) — bu adım UZUN sürebilir (dakikalar-saatler)." % egitim_python)
     if not _alt_surec_calistir(
@@ -275,15 +196,7 @@ def calistir(senaryo_sayisi: int, sadece_veri: bool, egitimi_zorla: bool) -> int
     except subprocess.TimeoutExpired:
         print("  ⚠️ Veri toplama zaman aşımına uğradı — biriken kadarıyla devam ediliyor.")
 
-    # CANLI TESPİT (bu oturumda): `war_gaming.py`, senaryo üretmek için
-    # ÜRETİM taktik modelini (`URETIM_ETIKETI`) Ollama üzerinden çağırır —
-    # ve bu model VARSAYILAN OLARAK `keep_alive=Forever` ile VRAM'de
-    # SÜRESİZ yüklü KALIR (bkz. `decision_engine.py`/`.env`). Bu yüzden
-    # [D] GPU kontrolü B'DEN HEMEN SONRA çalışırsa, GPU'yu "meşgul" olarak
-    # görür — AMA bu meşguliyet Kurucu'nun başka bir kullanımından DEĞİL,
-    # ORCHESTRATOR'IN KENDİ B ADIMINDAN kaynaklanır (kendi kendini bloke
-    # eden bir döngü — canlı testte GÖZLENDİ). Çözüm: B bittiğinde modeli
-    # AÇIKÇA boşalt, GERÇEK (dış) GPU kullanımı D'de doğru ölçülsün.
+    
     _adim_basligi(f"[B sonrası] Ollama '{URETIM_ETIKETI}' modeli VRAM'den boşaltılıyor")
     if not _alt_surec_calistir(
         ["ollama", "stop", URETIM_ETIKETI],
