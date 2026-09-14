@@ -12,8 +12,6 @@ import {
 import { karavulApi } from '../services/api'
 import type { KrizRaporuYaniti, OlayDurumu } from '../types/domain'
 
-// Olay şiddeti -> nokta rengi (bkz. `MapView`deki kriz-katmanı renkleriyle
-// AYNI mantık: kritik/katastrofik en parlak, düşük şiddet daha donuk).
 const SIDDET_RENGI: Record<string, string> = {
   Katastrofik: 'bg-crisis-500',
   Kritik: 'bg-crisis-500',
@@ -21,13 +19,10 @@ const SIDDET_RENGI: Record<string, string> = {
 }
 
 interface FloatingPanelProps {
-  /** Haritadaki (bkz. `App.tsx`) kritik olay listesi — "Aktif Olaylar" bölümünü besler. */
   aktifOlaylar: OlayDurumu[]
-  /** Rapor işlendikten, bir olay kapatıldıktan veya senaryo sıfırlandıktan sonra harita/metrikleri tazelemek için. */
   onVeriDegisti: () => void
 }
 
-/** Sol yüzer panel: aktif olay yönetimi + kriz raporu girişi + otonom karar motoru sonuçları. */
 export default function FloatingPanel({ aktifOlaylar, onVeriDegisti }: FloatingPanelProps) {
   const [metin, setMetin] = useState('')
   const [yukleniyor, setYukleniyor] = useState(false)
