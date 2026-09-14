@@ -38,10 +38,6 @@ VERI_SETI_DOSYASI = Path(__file__).resolve().parent / "golden_dataset.jsonl"
 KAYNAK_ETIKETI = "golden_v1"
 HEDEF_VARSAYILAN = 1000
 MAKS_DENEME_CARPANI = 3
-"""Hedefe ulaşmak için denenecek ÜST sınır = hedef * bu çarpan — bazı
-denemeler API/Ollama hatasıyla ya da `durum_ozeti` boş dönerek başarısız
-olabilir; sonsuz döngüye girmeden AÇIKÇA durur."""
-
 
 
 
