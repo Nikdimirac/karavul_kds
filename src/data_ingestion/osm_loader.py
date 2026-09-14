@@ -1,35 +1,4 @@
-"""
-Kriz ve Afet Yönetimi Karar Destek Sistemi
-===========================================
-OpenStreetMap (Overpass API) "Barış Zamanı" (Baseline) Veri Yükleyici.
 
-Sistemin krizden ÖNCEKİ, boş bir haritayla başlaması gerçekçi değildir: gerçek
-bir Karar Destek Sistemi, kriz raporları işlenmeden ÖNCE de bölgedeki gerçek
-kritik altyapıyı (hastaneler, itfaiye/polis, askeri alanlar, ana karayolları)
-bilmelidir. Bu script, OpenStreetMap'in Overpass API'sinden PİLOT BÖLGE olarak
-Elazığ (ve yakın çevresi) için bu gerçek-dünya verisini çeker, `src.core.models`
-şemasına dönüştürür ve `Neo4jConnection` üzerinden Bilgi Grafı'na "Barış
-Zamanı" (baseline) taban katmanı olarak yazar:
-
-    OSM etiketi                          -> Model                (durum)
-    -----------------------------------------------------------------------
-    amenity=hospital                     -> Facility (Hastane)     Aktif
-    landuse=military / amenity=military  -> Facility (Askeri Us)   Aktif
-    aeroway=aerodrome                    -> Facility (Havalimani)  Aktif
-    landuse=port / industrial=port /
-    harbour=yes                          -> Facility (Liman)       Aktif
-    amenity=fire_station                 -> Unit (Itfaiye)         Aktif
-    amenity=police                       -> Unit (Polis)           Aktif
-    highway=primary|trunk                -> Infrastructure(Karayolu) Açık
-
-Tüm baseline varlıkları BİLİNÇLİ olarak "Aktif"/"Açık" (acik_mi=True) yazılır;
-bir kriz raporu işlendiğinde (bkz. `src.data_ingestion.nlp_parser`) bu AYNI
-isimli düğümler `Neo4jConnection.add_node`'un isim-tabanlı MERGE mantığıyla
-güncellenip hasar/kapanma durumuna geçebilir.
-
-Çalıştırmak için:
-    python -m src.data_ingestion.osm_loader
-"""
 
 from __future__ import annotations
 
@@ -62,71 +31,32 @@ from src.core.models import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Sabitler
-# ---------------------------------------------------------------------------
 
-# Birden fazla Overpass aynası (mirror) sırayla denenir; bir tanesi
-# kapalıysa/rate-limit uyguluyorsa script tamamen başarısız olmaz.
 OVERPASS_ENDPOINTS: Tuple[str, ...] = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.osm.ch/api/interpreter",
 )
 
-# Elazığ şehir merkezini (~38.677, 39.222) yaklaşık 25-30 km yarıçapında
-# çevreleyen sabit bir bounding box: (guney, bati, kuzey, dogu).
-#
-# İdari sınır (Overpass "area") yerine BİLİNÇLİ olarak bir BBOX tercih
-# edildi: (1) Overpass aynaları arasında "area" sorgusu için gereken
-# admin_level/boundary etiketlemesi tutarsız olabiliyor ve sorgu hiç sonuç
-# dönmeyebiliyor; (2) sabit bir bbox, sonucu hem daha öngörülebilir hem de
-# daha hızlı/hafif kılıyor. Bu değer, `src.data_ingestion.nlp_parser`
-# içindeki "KOORDINAT KALIBRASYONU" bölgesiyle (enlem 38-39, boylam 39-40)
-# tutarlıdır.
+
 ELAZIG_BBOX: Tuple[float, float, float, float] = (38.45, 39.00, 38.85, 39.50)
 
 _REQUEST_TIMEOUT_SANIYE = 90
 _OVERPASS_ZAMAN_ASIMI_SANIYE = 60  # Overpass QL icindeki [timeout:N]
 
-# Overpass aynalarinin bir kismi (ör. overpass-api.de), `requests`in
-# varsayilan "python-requests/X.Y" User-Agent'ini otomatik bir bot/scraper
-# olarak isaretleyip 406 Not Acceptable ile REDDEDIYOR. Gercek, tanimlanabilir
-# bir istemci kimligi vermek bu blokaji asar. `real_osm_loader.py` da (zaten
-# bu modulden OVERPASS_ENDPOINTS/OSMBaselineLoader import ediyor) bu SABITI
-# buradan import ederek yeniden kullanir — tek kaynak, iki modul arasinda
-# senkron disi kalma riski yok.
+
 OVERPASS_REQUEST_HEADERS: Dict[str, str] = {
     "User-Agent": "KrizYonetimKDS_Elazig/1.0 (test_project)"
 }
 
-# Overpass "beds"/"capacity" gibi etiketler cok nadir bulunur; bulunamazsa
-# kullanilacak varsayimlar (gercekci ama KABA tahminlerdir).
+
 _VARSAYILAN_HASTANE_KAPASITESI = 50.0
 _VARSAYILAN_ASKERI_US_KAPASITESI = 100.0
 _VARSAYILAN_PERSONEL_SAYISI = 15
-# "VERİTABANI GENİŞLETME" (kanıtlanmış bir boşluk: `Havalimani`/`Liman`
-# FacilityType üyeleri Enum'da ZATEN vardı ama HİÇBİR yükleyici bunları
-# OSM'den ÇEKMİYORDU — grafta 1036+ askeri üs kaydına karşılık 0
-# havalimanı vardı). `local_osm_reader.py`nin ZATEN kullandığı `_VARSAYILAN_
-# HAVALIMANI_KAPASITESI = 200.0` İLE AYNI değer, tutarlılık için tekrarlanır
-# (iki modül birbirini import ETMEZ, bkz. bu dosyanın başındaki "iki modül
-# bağımsız kalsın" deseni notu).
+
 _VARSAYILAN_HAVALIMANI_KAPASITESI = 200.0
 _VARSAYILAN_LIMAN_KAPASITESI = 100.0
 
-# "VERİTABANI GENİŞLETME — İKİNCİ DALGA": `models.py` zaten
-# `EnergyInfrastructure` (Baraj/Trafo/Santral), `CommunicationNetwork`
-# (Baz İstasyonu) ve `ResourceHub` (Yakıt) şemalarını TANIMLIYORDU ama
-# HİÇBİR yükleyici bunları gerçek OSM verisinden ÇEKMİYORDU — grafta bu
-# kategoriler SADECE birkaç sentetik örnekle (`synthetic_unit_seeder.py`)
-# temsil ediliyordu (81 il için 2-3 kayıt). Bu, "Diyarbakır
-# Jet Üssü" hatasıyla AYNI kök sorunun (şema var ama veri YOK) daha GENİŞ
-# bir örneğidir. Gıda/Su/Tıbbi Malzeme/Mühimmat depoları BİLİNÇLİ OLARAK
-# EKLENMEDİ — bunlar için OSM'de güvenilir/evrensel bir etiket YOKTUR
-# (bkz. `Facility.facility_type` doğrulamasındaki AYNI "veri kaynağının
-# alan doluluğu netleşmeden erken bağlanmaması" ilkesi); rastgele/güvenilmez
-# bir eşleme ATANAN yanlış-pozitif riski, eksik veriden DAHA KÖTÜDÜR.
 _VARSAYILAN_SANTRAL_KAPASITESI_MW = 50.0
 _VARSAYILAN_TRAFO_KAPASITESI_MW = 10.0
 _VARSAYILAN_BARAJ_KAPASITESI_MW = 100.0
@@ -134,21 +64,15 @@ _VARSAYILAN_BAZ_ISTASYONU_KAPSAMA_KM = 5.0
 _VARSAYILAN_YAKIT_STOK_YUZDE = 75.0
 _VARSAYILAN_YAKIT_TUKENME_GUN = 30.0
 
-# highway tipine gore kaba tonaj kapasitesi varsayimi (trunk=devlet yolu,
-# primary=il yolu; gercek tonaj OSM'de neredeyse hic bulunmaz).
+
 _HIGHWAY_TONAJ_VARSAYIMLARI: Dict[str, float] = {"trunk": 60.0, "primary": 40.0}
 
 _DUNYA_YARICAPI_KM = 6371.0
 
 
-# ---------------------------------------------------------------------------
-# Kucuk matematik/parcalama yardimcilari
-# ---------------------------------------------------------------------------
-
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """İki enlem/boylam noktası arasındaki gerçek (jeodezik) mesafeyi
-    haversine formülüyle kilometre cinsinden hesaplar."""
+   
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     delta_phi = math.radians(lat2 - lat1)
     delta_lambda = math.radians(lon2 - lon1)
@@ -160,9 +84,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _geometri_uzunlugu_km(geometry: Sequence[Dict[str, float]]) -> float:
-    """Bir OSM yolunun (`out geom;` ile gelen ardışık nokta listesi) toplam
-    uzunluğunu, ardışık noktalar arası haversine mesafelerini toplayarak
-    hesaplar."""
+    
     toplam = 0.0
     for a, b in zip(geometry, geometry[1:]):
         toplam += _haversine_km(a["lat"], a["lon"], b["lat"], b["lon"])
@@ -172,17 +94,7 @@ def _geometri_uzunlugu_km(geometry: Sequence[Dict[str, float]]) -> float:
 def _en_uzak_iki_nokta(
     noktalar: Sequence[Tuple[float, float]]
 ) -> Tuple[Tuple[float, float], Tuple[float, float]]:
-    """Küçük bir nokta kümesi içinde birbirine en UZAK iki noktayı (kaba bir
-    "çap"/diameter yaklaşıklığı) bulur.
-
-    Aynı isimli bir karayolu OSM'de genellikle TEK bir yol değil, birçok ayrı
-    segmente (way) bölünmüş olarak bulunur (ör. "D-300" onlarca parçadan
-    oluşabilir). Bu segmentleri TEK bir güzergah çizgisine (bkz.
-    `_convert_highway_elements`) indirgerken, her segmentin uç noktaları bu
-    fonksiyona verilir; O(n²) karşılaştırma (segment sayısı küçük olduğundan
-    pratikte önemsiz) ile güzergahın gerçek uçtan uca ANA doğrultusunu temsil
-    eden iki nokta seçilir.
-    """
+   
     en_iyi_cift = (noktalar[0], noktalar[0])
     en_iyi_mesafe = -1.0
     for i in range(len(noktalar)):
@@ -195,9 +107,7 @@ def _en_uzak_iki_nokta(
 
 
 def _eleman_koordinati(el: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
-    """Bir Overpass elemanının koordinatını döner: `node` elemanlarında
-    doğrudan lat/lon, `out center` ile çekilen `way` elemanlarında ise
-    `center.lat`/`center.lon` bulunur."""
+   
     if "lat" in el and "lon" in el:
         return el["lat"], el["lon"]
     center = el.get("center")
@@ -207,31 +117,14 @@ def _eleman_koordinati(el: Dict[str, Any]) -> Tuple[Optional[float], Optional[fl
 
 
 def _varsayilan_isim(el: Dict[str, Any], tip_etiketi: str) -> str:
-    """OSM elemanının `name` etiketi yoksa, OSM tipi+id'sine dayalı BENZERSİZ
-    bir isim üretir.
-
-    Bu KRİTİKTİR: `Neo4jConnection.add_node`, düğümleri `isim` alanına göre
-    MERGE eder (bkz. `database.node_to_cypher`). İsimsiz iki farklı hastaneye
-    aynı sabit metni ("İsimsiz Hastane" gibi) vermek, ikisinin de YANLIŞLIKLA
-    TEK bir düğüme birleşmesine (ikincinin birincinin verilerini ezmesine)
-    yol açardı; OSM id'si her eleman için benzersiz olduğundan bu çakışmayı
-    engeller.
-    """
+   
     osm_tip = el.get("type", "node")
     osm_id = el.get("id", "?")
     return f"{tip_etiketi} (OSM {osm_tip}/{osm_id})"
 
 
 def _isimli_veya_teknik_isim(el: Dict[str, Any], gercek_ad: Optional[str], tip_etiketi: str) -> str:
-    """`_varsayilan_isim`in GENELLEŞTİRİLMİŞ hali: `gercek_ad` (OSM `name`
-    etiketi) VARSA BİLE `isim`e yine bir OSM tip/id soneki ekler (bkz.
-    `_convert_point_elements`'teki "ULUSAL İSİM ÇAKIŞMASI DÜZELTMESİ"
-    notu) — `_varsayilan_isim`in TEK BAŞINA (isimsiz elemanlar için)
-    ürettiği benzersizlik garantisini, GERÇEK adı olan elemanlara da
-    genişletir. Biçim `OSM_TEKNIK_KIMLIK_IMZASI`nın ("(OSM ") beklediği
-    ortak önekle UYUMLUDUR (bu modül döngüsel import'tan kaçınmak için o
-    sabiti DOĞRUDAN İMPORT ETMEZ, bkz. `_convert_point_elements`
-    docstring'i)."""
+   
     osm_tip = el.get("type", "node")
     osm_id = el.get("id", "?")
     taban = gercek_ad or tip_etiketi
@@ -239,7 +132,6 @@ def _isimli_veya_teknik_isim(el: Dict[str, Any], gercek_ad: Optional[str], tip_e
 
 
 def _tahmini_sayisal_deger(tags: Dict[str, Any], anahtarlar: Sequence[str], varsayilan: float) -> float:
-    """`tags` içindeki ilk sayısal alanı (varsa) döner; yoksa `varsayilan`."""
     for anahtar in anahtarlar:
         deger = tags.get(anahtar)
         if deger is None:
@@ -251,20 +143,8 @@ def _tahmini_sayisal_deger(tags: Dict[str, Any], anahtarlar: Sequence[str], vars
     return varsayilan
 
 
-# ---------------------------------------------------------------------------
-# OSM Baseline Yukleyici
-# ---------------------------------------------------------------------------
-
-
 class OSMBaselineLoader:
-    """OpenStreetMap Overpass API'sinden pilot bölge (varsayılan: Elazığ)
-    için "Barış Zamanı" (baseline) kritik altyapı verisini çekip Bilgi
-    Grafı'na yazan yükleyici.
-
-    Kullanım:
-        loader = OSMBaselineLoader(Neo4jConnection())
-        sayaclar = loader.load_baseline()   # {"facilities": 6, "units": 4, "infrastructures": 3}
-    """
+    
 
     def __init__(
         self,
@@ -276,15 +156,9 @@ class OSMBaselineLoader:
         self.bbox = bbox
         self._endpoints = list(overpass_endpoints)
 
-    # ------------------------------------------------------------------ #
-    # Genel kullanim (public API)
-    # ------------------------------------------------------------------ #
-
+   
     def load_baseline(self) -> Dict[str, int]:
-        """Overpass'tan veri çeker, modellere dönüştürür ve Neo4j'e yazar
-        (`add_node` ile upsert/MERGE — script birden çok kez çalıştırılsa
-        bile kopya düğüm oluşmaz). Dönüş: {"facilities": N, "units": N,
-        "infrastructures": N} şeklinde yazılan düğüm sayıları."""
+        
         varliklar = self.build_nodes()
         sayaclar: Dict[str, int] = {}
         for anahtar, liste in varliklar.items():
@@ -295,11 +169,7 @@ class OSMBaselineLoader:
         return sayaclar
 
     def build_nodes(self) -> Dict[str, List[Any]]:
-        """Overpass'tan ham elemanları çeker ve `src.core.models` Pydantic
-        modellerine (Facility/Unit/Infrastructure) dönüştürür. Neo4j'e HENÜZ
-        YAZMAZ (bkz. `load_baseline`) — bu ayrım, dönüştürülen veriyi Neo4j'e
-        dokunmadan denetlemek/test etmek isteyen çağıranlar için kullanışlıdır.
-        """
+       
         ham = self.fetch_raw_elements()
         facilities, units, energiler, iletisimler, kaynaklar = self._convert_point_elements(ham["noktalar"])
         infrastructures = self._convert_highway_elements(ham["yollar"])
@@ -313,16 +183,11 @@ class OSMBaselineLoader:
         }
 
     def fetch_raw_elements(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Overpass'a İKİ AYRI sorgu gönderir: nokta-tipi varlıklar
-        (hastane/itfaiye/polis/askeri, `out center tags;`) ve ana karayolları
-        (`out geom tags;` — tam geometri gerektiğinden ayrı sorgulanır)."""
+       
         nokta_elemanlari = self._run_overpass_query(self._build_point_query())["elements"]
         yol_elemanlari = self._run_overpass_query(self._build_highway_query())["elements"]
         return {"noktalar": nokta_elemanlari, "yollar": yol_elemanlari}
 
-    # ------------------------------------------------------------------ #
-    # Overpass sorgu insasi
-    # ------------------------------------------------------------------ #
 
     def _bbox_str(self) -> str:
         south, west, north, east = self.bbox
@@ -376,11 +241,7 @@ out geom tags;
 """
 
     def _run_overpass_query(self, query: str) -> Dict[str, Any]:
-        """Overpass QL sorgusunu, tanımlı aynalar (mirror) üzerinde sırayla
-        dener; ilk başarılı yanıtı JSON olarak döner. Hiçbiri başarılı
-        olmazsa `RuntimeError` fırlatır (ağ hatası/timeout Ollama'daki
-        `RuntimeError` deseniyle TUTARLIDIR, bkz. `OllamaParser._invoke_llm`).
-        """
+        
         son_hata: Optional[Exception] = None
         for endpoint in self._endpoints:
             try:
@@ -400,44 +261,12 @@ out geom tags;
             f"Hicbir Overpass API ucuna ulasilamadi (denenenler: {self._endpoints}): {son_hata}"
         ) from son_hata
 
-    # ------------------------------------------------------------------ #
-    # Overpass elemanlari -> Pydantic modelleri
-    # ------------------------------------------------------------------ #
-
+    
     @staticmethod
     def _convert_point_elements(
         elements: List[Dict[str, Any]],
     ) -> Tuple[List[Facility], List[Unit], List[EnergyInfrastructure], List[CommunicationNetwork], List[ResourceHub]]:
-        """Hastane/askeri/havalimanı/liman elemanlarını `Facility`'ye,
-        itfaiye/polis elemanlarını `Unit`'e, enerji/iletişim/yakıt
-        elemanlarını sırasıyla `EnergyInfrastructure`/`CommunicationNetwork`/
-        `ResourceHub`'a çevirir. FacilityType enum'ında itfaiye/polis
-        için karşılık gelen bir tip OLMADIĞINDAN (bkz. `src.core.models`),
-        bu ikisi bilinçli olarak `Unit` (personel barındıran bir birim)
-        olarak modellenir.
-
-        "VERİTABANI GENİŞLETME — İKİNCİ DALGA" (bkz. modül-üstü
-        `_VARSAYILAN_SANTRAL_KAPASITESI_MW` docstring'i): dönüş imzası BEŞ
-        elemanlı bir tuple'a genişledi (eskiden SADECE `facilities, units`)
-        — TÜM çağıranlar (`OSMBaselineLoader.build_nodes`, `RealOsmLoader.
-        build_nodes`) buna göre GÜNCELLENDİ.
-
-        "ULUSAL İSİM ÇAKIŞMASI" DÜZELTMESİ (bkz.
-        `local_osm_reader._amenity_dugumu_uret`'teki AYNI başlıklı not):
-        `isim` ARTIK HER ZAMAN bir OSM tip/id soneki taşır (SADECE isimsiz
-        elemanlar için DEĞİL, GERÇEK bir `name` etiketi taşıyanlar için
-        de) — birden fazla şehir/il aynı çalıştırmada yüklenirken (bkz.
-        `RealOsmLoader(sehirler=[...])`) AYNI jenerik gerçek ada sahip İKİ
-        FARKLI gerçek tesis (ör. iki ayrı ildeki "Devlet Hastanesi"),
-        `isim`in Neo4j'deki TEK BAŞINA benzersizlik anahtarı olması
-        yüzünden SESSİZCE TEK bir düğüme birleşmesin diye. `aciklama`
-        alanı GERÇEK/temiz adı (varsa) ayrıca taşır — bu, `real_osm_
-        loader`/`local_osm_reader`ın Sokak/Köprü için ZATEN kullandığı
-        AYNI `(OSM tip/ID)` sözleşmesidir (bkz. `OSM_TEKNIK_KIMLIK_
-        IMZASI` — burada DOĞRUDAN İMPORT EDİLMEZ, çünkü bu modül
-        `real_osm_loader`ın KENDİSİ tarafından import edilir; döngüsel
-        import'tan kaçınmak için AYNI metin biçimi bağımsız olarak
-        üretilir, bkz. `_osm_kimlik_soneki`)."""
+       
         facilities: List[Facility] = []
         units: List[Unit] = []
         energiler: List[EnergyInfrastructure] = []
@@ -613,25 +442,13 @@ out geom tags;
                         hareket_kabiliyeti=MobilityStatus.SINIRLI_HAREKETLI,
                     )
                 )
-            # Diger amenity/landuse kombinasyonlari bu baseline yukleyicinin
-            # kapsami disidir; sessizce atlanir.
+
 
         return facilities, units, energiler, iletisimler, kaynaklar
 
     @staticmethod
     def _convert_highway_elements(elements: List[Dict[str, Any]]) -> List[Infrastructure]:
-        """Ana karayolu (`highway=primary|trunk`) elemanlarını `Infrastructure`
-        güzergahlarına çevirir.
-
-        ÖNEMLİ: OSM'de tek bir isimli karayolu (ör. "Elazığ-Malatya Yolu")
-        neredeyse HER ZAMAN onlarca ayrı `way` segmentine bölünmüş haldedir.
-        Bu segmentler burada `isim`e göre GRUPLANIR ve TEK bir Infrastructure
-        düğümüne indirgenir (toplam uzunluk = segment uzunlukları toplamı,
-        uç noktalar = tüm segment uçları arasında en uzak ikili — bkz.
-        `_en_uzak_iki_nokta`); aksi halde `add_node`'un isim-bazlı MERGE'i
-        (bkz. `database.node_to_cypher`) her segmenti aynı düğüme yazıp
-        birbirinin üzerine yazar ve veri kaybına yol açardı.
-        """
+      
         gruplar: Dict[str, Dict[str, Any]] = {}
 
         for el in elements:
@@ -674,7 +491,7 @@ out geom tags;
         return infra_listesi
 
 
-def main() -> None:  # pragma: no cover - manuel/CLI calistirma amaclidir
+def main() -> None:  
     logging.basicConfig(level=logging.INFO)
 
     db = Neo4jConnection()
