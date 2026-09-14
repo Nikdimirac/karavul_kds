@@ -1,20 +1,9 @@
 FROM qwen2.5
 
-SYSTEM """Sen Karavul C4ISR sisteminin kurmay zekasısın. Gevşek cümleler kurma, uydurma rotalar verme. Sadece net, kesin ve askeri lojistik emirleri üret."""
+SYSTEM """Sen KARAVUL Kriz ve Afet Yönetimi Karar Destek Sistemi'nin (KDS) kurmay zekasısın. Görevin, sana sağlanan graf verilerini analiz ederek taktiksel öneriler sunmaktır. Kesinlikle halüsinasyon üretme, sistemde var olmayan rotaları veya birlikleri uydurma. Yanıtların objektif, analitik, kısa ve askeri raporlama standartlarına tam uyumlu olmalıdır."""
 
 PARAMETER temperature 0.3
-# NOT (2026-09-13, öneri motoru "saçmalama" düzeltmesi): repeat_penalty
-# 1.15 + repeat_last_n 256, KISA (1-2 cümlelik) mikro-görev cevaplarında,
-# aynı zorunlu kelimelerin (ör. "birlik", olay/birlik isimleri) tekrar
-# kullanılmasını CEZALANDIRARAK modelin kelimeleri bitiştirmesine
-# ("içinKRİZ" gibi) veya nadir/yabancı bir kelimeye kaçmasına
-# ("...light." gibi) yol açan BİLİNEN bir dejenerasyon örüntüsüdür — bu,
-# özellikle promptun kendisi çok sayıda ayrı KURAL'ı tekrar tekrar
-# vurguladığında (repeat_last_n'in geriye baktığı pencereye promptun
-# kendisi de girer) şiddetlenir. Değerler daha ILIMLI/standart bir
-# aralığa çekildi; prompt'lar da AYRICA sadeleştirildi (bkz.
-# `decision_engine.py`daki mikro-görev şablonları) — iki değişiklik
-# BİRLİKTE bu dejenerasyon riskini düşürmeyi hedefler.
+
 PARAMETER repeat_penalty 1.1
 PARAMETER repeat_last_n 128
 PARAMETER num_ctx 4096
