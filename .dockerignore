@@ -1,14 +1,10 @@
-# Sürüm kontrolü / IDE
 .git
 .gitignore
 .vscode
 .idea
 
-# Gerçek sırlar — Dockerfile ASLA imaja gömmemeli; compose bunu runtime'da
-# environment olarak enjekte eder (bkz. docker-compose.yml `env_file: .env`).
 .env
 
-# Python çalışma zamanı artıkları
 __pycache__/
 *.pyc
 *.pyo
@@ -21,10 +17,8 @@ venv/
 .venv/
 env/
 
-# Yerel veri / log kalıntıları (konteynerde volume ile yönetilir)
 *.log
 scratchpad/
 data/
 
-# Streamlit yerel önbellek
 .streamlit/secrets.toml
