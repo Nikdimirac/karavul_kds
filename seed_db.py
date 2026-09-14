@@ -1,57 +1,3 @@
-"""
-Kriz ve Afet Yönetimi Karar Destek Sistemi
-===========================================
-TEK SEFERLİK HARİTA TOHUMLAMA (SEEDING) BETİĞİ — "OFFLINE-FIRST / SADECE
-NEO4J" MİMARİ KARARI (kullanıcı talebi, kök neden analizi).
-
-KÖK NEDEN: Karar Motoru (bkz. `src.core.decision_engine`), bir kriz raporu
-işlendiğinde `.osm.pbf` (devasa "Tüm Türkiye" dosyası) veya canlı OSM
-verisini ANLIK olarak taramaya/indirmeye çalışıyor, bu da kriz anında
-sistemin dakikalarca KİLİTLENMESİNE yol açıyordu — bağımsız ve yerel bir
-askeri komuta sistemi kriz anında harita İNŞA ETMEZ, sadece ELİNDEKİ
-haritayı OKUR.
-
-BU BETİK, o ağır PBF tarama/yazma işini canlı kriz akışından TAMAMEN
-İZOLE eder: sistem İLK KURULURKEN, BİR KEZ çalıştırılır; Neo4j'i, Karar
-Motoru'nun ihtiyaç duyacağı TÜM harita verisiyle (ulusal omurga + istenen
-bölgelerin kılcal yol ağı) KALICI olarak (`gecici_mi=False`) doldurur.
-Sistem bundan SONRA (canlı kriz akışında, `streamlit run src/ui/app.py`
-çalışırken) SADECE Neo4j'den okur — "varsa vardır, yoksa yoktur"; hiçbir
-koşulda yeni bir harita düğümü yazmaya veya dosya I/O'suna GİRMEZ (bkz.
-`src.ui.app` ve `src.data_ingestion.local_osm_reader` modül başlarındaki
-AYNI başlıklı "OFFLINE-FIRST / SADECE NEO4J" notları).
-
-Bu betik İKİ AŞAMA çalıştırır (ikisi de `LocalOsmReader` üzerinden, aynı
-yerel `.osm.pbf` dosyasını KULLANIR — çalışma anında hiçbir internet/API
-çağrısı YAPILMAZ):
-
-  1. OMURGA (ZORUNLU, TÜM ülke): `LocalOsmReader.omurga_yukle()` — SADECE
-     ana yolları (motorway/trunk/primary) ve kritik tesisleri (hastane/
-     polis/itfaiye/askeri üs/havalimanı) TÜM Türkiye için Neo4j'e yükler.
-     Bu, "hangi büyük yol nereye gidiyor, en yakın hastane/karakol nerede"
-     sorularını 81 ilin TAMAMINDA yanıtlayabilecek bir "iskelet"tir.
-
-  2. BÖLGE (OPSİYONEL, `--bolge` ile TEKRARLANABİLİR): `LocalOsmReader.
-     kriz_bolgesi_yukle(..., kalici=True)` — belirli bir merkez/yarıçap
-     çevresindeki "kılcal damarları" (residential/tertiary dahil) da
-     KALICI olarak yükler. Operasyon bölgesi olarak bilinen şehirler
-     (ör. Elazığ, Malatya) için bunu ÖNCEDEN çalıştırmak, Karar Motoru'nun
-     o şehirlerde sadece ana yol DEĞİL, GERÇEK sokak-seviyesi alternatif
-     rota/en-yakın-birim analizini de yapabilmesini sağlar.
-
-Çalıştırmak için (proje kök dizininden):
-    python seed_db.py                                          # SADECE omurga
-    python seed_db.py --bolge 38.681 39.226 15                  # + Elazığ merkez, 15 km
-    python seed_db.py --bolge 38.681 39.226 15 --bolge 38.355 38.309 15  # + Malatya
-    python seed_db.py --atla-omurga --bolge 38.681 39.226 15     # omurga zaten yüklüyse atla
-
-⚠️  DİKKAT: `--pbf` verilmezse `TURKEY_OSM_PBF_PATH` ortam değişkeni,
-    o da yoksa proje kökündeki `data/turkey-latest.osm.pbf` aranır (bkz.
-    `local_osm_reader.varsayilan_pbf_yolu`). Büyük bir ülke-çapında dosyada
-    omurga taraması dosya boyutuna göre DAKİKALAR sürebilir — bu KABUL
-    EDİLEBİLİR bir maliyettir, çünkü bu betik SADECE kurulumda BİR KEZ
-    çalışır; canlı kriz akışı bu maliyete ASLA girmez.
-"""
 
 from __future__ import annotations
 
@@ -68,9 +14,7 @@ from src.data_ingestion.local_osm_reader import (
     varsayilan_pbf_yolu,
 )
 
-# Windows konsollari genellikle UTF-8 DEGIL, yerel bir kod sayfasi kullanir
-# (bkz. `run_real_data.py`daki AYNI gerekce) — emoji/ok karakterleri
-# `UnicodeEncodeError` ile cokmesin diye stdout/stderr UTF-8'e zorlanir.
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -79,10 +23,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Duz ANSI renk kodlari (bkz. `run_real_data.py` ile AYNI desen — harici
-# bagimlilik eklememek icin).
-# ---------------------------------------------------------------------------
 
 
 class Renk:
@@ -149,7 +89,7 @@ def _argumanlari_ayristir(argv: List[str]) -> argparse.Namespace:
 def main(argv: List[str] | None = None) -> None:
     args = _argumanlari_ayristir(argv if argv is not None else sys.argv[1:])
     pbf_yolu = args.pbf or varsayilan_pbf_yolu()
-    bolgeler: List[Tuple[float, float, float]] = [tuple(b) for b in (args.bolge or [])]  # type: ignore[misc]
+    bolgeler: List[Tuple[float, float, float]] = [tuple(b) for b in (args.bolge or [])]  
 
     _baslik("HARİTA TOHUMLAMA (SEED) — TEK SEFERLİK, OFFLINE, İZOLE KURULUM AKIŞI")
     _satir("PBF dosyası", pbf_yolu, Renk.MAVI)
@@ -175,7 +115,6 @@ def main(argv: List[str] | None = None) -> None:
     reader = LocalOsmReader(pbf_yolu, db)
     t0 = time.perf_counter()
 
-    # --- ADIM 1: ULUSAL OMURGA (kalıcı, TÜM ülke) ---
     if not args.atla_omurga:
         print(
             f"\n{Renk.MAVI}{Renk.BOLD}[1/{1 + len(bolgeler)}] Ulusal omurga yükleniyor "
@@ -192,7 +131,6 @@ def main(argv: List[str] | None = None) -> None:
     else:
         print(f"\n{Renk.SARI}[1/{1 + len(bolgeler)}] Omurga yükleme ATLANDI (--atla-omurga).{Renk.BITIS}")
 
-    # --- ADIM 2+: KALICI BÖLGE(LER) (kılcal yol ağı, KALICI) ---
     for idx, (enlem, boylam, yaricap_km) in enumerate(bolgeler, start=2):
         print(
             f"\n{Renk.MAVI}{Renk.BOLD}[{idx}/{1 + len(bolgeler)}] Bölge yükleniyor "
@@ -211,7 +149,6 @@ def main(argv: List[str] | None = None) -> None:
 
     sure = time.perf_counter() - t0
 
-    # --- DOĞRULAMA: veritabanına doğrudan sorgu atarak teyit et ---
     _baslik("SONUÇ RAPORU")
     gercek_toplam_dugum = db.execute_query("MATCH (n) RETURN count(n) AS adet")[0]["adet"]
     etiket_dagilimi = db.execute_query(
