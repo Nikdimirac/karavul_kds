@@ -1,12 +1,6 @@
 import { RENK } from '../utils/tacticalIcons'
 
-// "SUNUM CİLASI" (haritadaki görsel hiyerarşiyi profesyonel hale getirir):
-// haritadaki renk/işaretçi dilinin
-// ne anlama geldiği eskiden SADECE tek tek marker'ların `title` tooltip'inde
-// (fare üzerine gelmeden görünmez) gizliydi — profesyonel bir taktiksel
-// haritada KALICI, görünür bir açıklama (lejant) beklenir. `FloatingPanel`
-// (bkz. `App.tsx`) `inset-y-24` ile üstten/alttan 96px boşluk bırakır; bu
-// panel o boşluğa, `FloatingPanel` ile AYNI genişlikte, hizalı şekilde oturur.
+
 const MADDELER: Array<{ renk: string; etiket: string; sekil?: 'nokta' | 'cizgi' }> = [
   { renk: RENK.kriz, etiket: 'Kriz Noktası' },
   { renk: RENK.tactical, etiket: 'Görevdeki Birlik' },
@@ -16,7 +10,6 @@ const MADDELER: Array<{ renk: string; etiket: string; sekil?: 'nokta' | 'cizgi' 
   { renk: RENK.civil, etiket: 'Yerleşim Merkezi' },
 ]
 
-/** Sol alt köşede yüzen, harita işaretçi renklerini açıklayan taktiksel lejant. */
 export default function MapLegend() {
   return (
     <div className="pointer-events-auto absolute bottom-4 left-4 z-20 w-[26rem] max-w-[90vw] overflow-hidden rounded-lg border border-cmd-border/80 bg-cmd-900/75 shadow-lg shadow-black/40 backdrop-blur-md">
