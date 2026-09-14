@@ -1,72 +1,4 @@
-"""
-Kriz ve Afet Yönetimi Karar Destek Sistemi
-===========================================
-"FAZ 7: GÖLGE MODU" (War Gaming) — OTONOM VERİ TOPLAMA BETİĞİ (kullanıcı
-talebi — Kurucu'nun kritik C4ISR sorusu: "Sınır nerede ve iyi/kötü kararı
-nasıl ayırt edeceğiz?").
 
-Bu betik, `api.py`yi (bkz. proje kökü — `uvicorn api:app --port 8000` ile
-ÇALIŞIYOR OLMALIDIR) rastgele kriz senaryolarıyla tekrar tekrar "dövüştürüp"
-(war-gaming), Karar Destek Motoru'nun ÜRETTİĞİ taktiksel önerileri bir
-"Otomatik Hakem" (Validator) süzgecinden geçirir — SADECE mantıklı/tutarlı
-kararlar `karavul_dataset.jsonl`e (JSONL — satır başına bir JSON kaydı)
-yazılır; halüsinasyon şüpheli kararlar terminale AÇIKÇA loglanıp ÇÖPE ATILIR
-(kotadan SAYILMAZ).
-
-"v2" GÜNCELLEMESİ — `ProceduralInfrastructureCrisis` (kullanıcı talebi:
-"eski sabit listeleri sil, Neo4j'deki GERÇEK Settlement/otoyol/liman/hastane
-düğümlerini hedef alan, coğrafi bağlama uygun kriz senaryoları üret"): eski
-`SENARYO_SABLONLARI` (10 SABİT, elle yazılmış metin) TAMAMEN KALDIRILDI.
-Yerine `ProceduralInfrastructureCrisis` sınıfı geldi — bu sınıf Neo4j'e
-(SADECE OKUMA amaçlı, `add_settlements.py`nin YAZMA bağlantısıyla AYNI
-sınıf ama BAĞIMSIZ bir örnek) bağlanıp GERÇEK varlık havuzlarını
-(`Settlement`, `Otoyol` [motorway/trunk], `Liman`, `Hastane`) çeker; HER
-senaryo, bu havuzlardan rastgele seçilen GERÇEK bir varlığın ismini/ilini
-f-string ile bir kriz metnine gömer — "coğrafi bağlama uygunluk" (kullanıcı
-talebi: "ilçede sel, otoyolda zincirleme kaza, limanda endüstriyel yangın")
-her varlık TÜRÜNE, o türe ANLAMLI gelen kriz tipleriyle eşleştirilerek
-sağlanır (bkz. `_SENARYO_TANIMLARI`) — bir "Liman"a asla "zincirleme kaza"
-ÖNERİLMEZ. Sayısal detaylar da (deprem büyüklüğü, araç sayısı, yağış mm'si)
-HER çağrıda rastgele üretildiğinden, aynı GERÇEK varlık bile HER seferinde
-"benzersiz" bir rapor üretir.
-
-MİMARİ NOT (bkz. `add_settlements.py`deki BENZER karar): bu betik artık
-SADECE bir HTTP istemcisi DEĞİLDİR — hedef havuzlarını OKUMAK için Neo4j'e
-DOĞRUDAN (salt-okunur) bağlanır; ama kriz raporunu GÖNDERME/senaryo
-SIFIRLAMA işlemleri HÂLÂ `api.py`ye HTTP üzerinden yapılır (`decision_
-engine.py`/`database.py`/`api.py`nin TEK SATIRINA yine DOKUNULMAZ — SADECE
-dışarıdan okur/çağırır).
-
-KATI KURALLAR (kullanıcı talebi — HER BİRİ AŞAĞIDA madde madde uygulanır):
-  1. SINIR (KOTA): `MAX_SUCCESSFUL_SCENARIOS = 150` — betik TAM 150 geçerli/
-     kusursuz senaryo topladığında OTOMATİK durur. Sonsuz döngü YOKTUR;
-     AYRICA `MAX_TOTAL_DENEME` ile toplam deneme sayısına da bir ÜST SINIR
-     konur (bkz. aşağıdaki "İKİNCİ GÜVENCE" notu) — API'nin sistematik
-     olarak HER seferinde geçersiz sonuç ürettiği bir arıza durumunda bile
-     (%0 geçerlilik oranı) betik GERÇEKTEN sonsuza dek dönemez.
-  2. PROSEDÜREL KRİZ ÜRETİCİ (`ProceduralInfrastructureCrisis`): Neo4j'deki
-     GERÇEK Settlement/Otoyol/Liman/Hastane varlıklarını hedef alan,
-     coğrafi bağlama uygun, rastgele sayısal detaylı f-string senaryolar
-     üretir (bkz. yukarıdaki "v2 GÜNCELLEMESİ" notu).
-  3. OTOMATİK HAKEM (Validator): `gecerli_mi()` — HER sonuç, diske
-     yazılmadan ÖNCE bu süzgeçten geçer:
-       a) `taktiksel_oneriler` GERÇEKTEN dolu bir liste mi?
-       b) Önerilerin HİÇBİRİNDE "kapalı bir rota/güzergah öner" (aynı
-          cümlede "kapalı" + "rota/güzergah/yol" birlikte GEÇMİYOR mu)?
-       c) EN AZ bir öneride "açık" (rota/güzergah/yol AÇIK olduğuna dair)
-          bir ifade GEÇİYOR mu?
-     Bunlardan biri bile başarısız olursa: terminale "🛑 Geçersiz Taktik -
-     Reddedildi" (+ sebep) yazılır, kayıt ATILMAZ, kotadan DÜŞÜLMEZ.
-  4. TEMİZLİK VE BEKLEME: HER denemeden SONRA (geçerli/geçersiz FARK ETMEZ)
-     `POST /api/reset-scenario` ile Bilgi Grafı temizlenir (aksi halde
-     sonraki senaryo, ÖNCEKİ senaryonun kalıntılarıyla KARIŞIRDI). Ekran
-     kartını/Ollama'yı BOĞMAMAK için her tur arasında `time.sleep(4)`
-     (`DONGU_BEKLEME_SANIYE`) vardır.
-
-Çalıştırmak için (proje kökünden, `api.py` `uvicorn api:app --port 8000`
-ile ZATEN çalışıyorken, Neo4j'de `add_settlements.py` ÇALIŞTIRILMIŞ olarak):
-    python war_gaming.py
-"""
 
 from __future__ import annotations
 
@@ -92,60 +24,32 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# 1) SINIR (KOTA) — kullanıcı talebi: "Sonsuz döngü KULLANMA"
-# ---------------------------------------------------------------------------
+
 
 API_TABAN_URL = os.getenv("KARAVUL_API_BASE_URL", "http://localhost:8000")
 VERI_SETI_DOSYASI = os.getenv("KARAVUL_DATASET_DOSYASI", "karavul_dataset.jsonl")
 
 MAX_SUCCESSFUL_SCENARIOS = int(os.getenv("KARAVUL_MAX_BASARILI_SENARYO", "150"))
-"""Betiğin toplayacağı GEÇERLİ (Otomatik Hakem'den geçmiş) senaryo sayısı —
-bu sayıya ulaşınca betik KENDİLİĞİNDEN durur. `KARAVUL_MAX_BASARILI_SENARYO`
-ortam değişkeniyle geçersiz kılınabilir (bkz. `mlops/orchestrator.py` —
-otomasyonun HER turda küçük, öngörülebilir bir parti toplaması için;
-değişken verilmezse varsayılan davranış [150] AYNEN korunur)."""
+
 
 MAX_TOTAL_DENEME = int(os.getenv("KARAVUL_MAX_TOPLAM_DENEME", "1000"))
-""""İKİNCİ GÜVENCE" (kullanıcı talebinin "sonsuz döngü YOK" ilkesinin
-YAPISAL garantisi): `MAX_SUCCESSFUL_SCENARIOS` SADECE geçerli sonuçları
-sayar — API sistematik olarak HER seferinde geçersiz/halüsinasyonlu bir
-sonuç üretirse (%0 geçerlilik), "150 geçerliye ulaşana kadar dön" kuralı
-TEK BAŞINA sonsuz bir döngüye dönüşürdü. Bu ikinci, TOPLAM deneme sayısına
-(geçerli+geçersiz FARK ETMEKSİZİN) dayalı üst sınır, o senaryoda bile
-betiğin KESİN olarak sonlanmasını garanti eder. `KARAVUL_MAX_TOPLAM_DENEME`
-ile geçersiz kılınabilir (bkz. yukarıdaki AYNI gerekçe)."""
+
 
 ISTEK_ZAMAN_ASIMI_SANIYE = float(os.getenv("KARAVUL_ISTEK_ZAMAN_ASIMI_SANIYE", "180"))
-"""`POST /api/analyze-crisis` GERÇEK bir Ollama LLM zincirini (rapor
-ayrıştırma + 3 taktiksel mikro-görev) tetiklediğinden, `decision_engine.py`
-ile AYNI "belgelenmiş en kötü durumun üzerinde pay bırak" ilkesiyle (canlı
-testlerde tek bir çağrı 20-30 sn sürdü) cömert bir varsayılan seçildi."""
+
 
 DONGU_BEKLEME_SANIYE = 4.0
-""""EKRAN KARTINI BOĞMAMAK" (kullanıcı talebi): her tur (geçerli/geçersiz
-FARK ETMEKSİZİN) arasında beklenen süre — ardışık Ollama çağrılarının
-GPU'yu/yerel modeli sürekli %100'de tutmasını önler."""
 
 
-# ---------------------------------------------------------------------------
-# 2) `ProceduralInfrastructureCrisis` — kullanıcı talebi: "eski sabit
-#    listeleri sil, GERÇEK Neo4j varlıklarını hedef alan, coğrafi bağlama
-#    uygun, benzersiz senaryolar üret"
-# ---------------------------------------------------------------------------
+
+
 
 _HEDEF_HAVUZU_LIMITI = 3000
-"""HER hedef havuzu (Settlement/Otoyol/Liman/Hastane) için üst sınır —
-`api.py`deki AYNI "kesin sınır" ilkesi: bu betik HİÇBİR sorguyu sınırsız
-BIRAKMAZ (ulusal ölçekte binlerce hastane/otoyol segmenti olabilir)."""
+
 
 
 def _yerlesim_temiz_ad(yerlesim: Dict[str, Any]) -> str:
-    """`add_settlements.py`, ilçe isimlerini `"<İlçe> (<İl>)"` biçiminde
-    BENZERSİZLEŞTİRİR (bkz. o betiğin `yerlesimleri_olustur` docstring'i) —
-    bu sonek, doğal okunan bir kriz cümlesi İÇİN (parantezli teknik bir ad
-    yerine) çıkarılır. `il` bilgisi zaten AYRI bir alanda (`yerlesim['il']`)
-    mevcuttur, kaybolmaz."""
+    
     isim = yerlesim["isim"]
     if yerlesim.get("yerlesim_tipi") == "Ilce Merkezi":
         parantez_konumu = isim.rfind(" (")
@@ -155,17 +59,12 @@ def _yerlesim_temiz_ad(yerlesim: Dict[str, Any]) -> str:
 
 
 def _yerlesim_konum_ifadesi(yerlesim: Dict[str, Any]) -> str:
-    """"İl merkezinde" / "İl ili İlçe ilçesinde" — doğal Türkçe konum
-    ifadesi (bkz. `_yerlesim_temiz_ad`)."""
+    
     if yerlesim.get("yerlesim_tipi") == "Il Merkezi":
         return f"{yerlesim['il']} il merkezinde"
     return f"{yerlesim['il']} ili {_yerlesim_temiz_ad(yerlesim)} ilçesinde"
 
 
-# --- Kategori bazlı f-string şablon fonksiyonları -------------------------
-# HER fonksiyon GERÇEK bir Neo4j varlığını (dict) alır, rastgele sayısal
-# detaylarla (büyüklük/araç sayısı/yağış mm'si/hektar) BENZERSİZ bir kriz
-# raporu ÜRETİR — aynı varlık bile HER çağrıda farklı bir metin verir.
 
 
 def _sel_senaryosu(yerlesim: Dict[str, Any]) -> str:
@@ -232,11 +131,8 @@ def _hastane_senaryosu(hastane: Dict[str, Any]) -> str:
     )
 
 
-# (senaryo_turu, hedef_havuzu_adı, şablon_fonksiyonu) — "COĞRAFİ BAĞLAMA
-# UYGUNLUK" (kullanıcı talebi) TAM OLARAK burada sağlanır: bir "Liman"
-# hedefi ASLA "Zincirleme Kaza" şablonuna GİTMEZ, bir "Otoyol" hedefi ASLA
-# "Sel" şablonuna GİTMEZ — her satır, o varlık TÜRÜNE ANLAMLI gelen kriz
-# tipleriyle EL İLE eşleştirilmiştir.
+
+
 _SENARYO_TANIMLARI: List[Tuple[str, str, Callable[[Dict[str, Any]], str]]] = [
     ("Sel", "Settlement", _sel_senaryosu),
     ("Deprem", "Settlement", _deprem_senaryosu),
@@ -248,14 +144,7 @@ _SENARYO_TANIMLARI: List[Tuple[str, str, Callable[[Dict[str, Any]], str]]] = [
 
 
 class ProceduralInfrastructureCrisis:
-    """Neo4j'deki GERÇEK sivil/altyapı varlıklarını (Settlement/Otoyol/
-    Liman/Hastane) hedef alan, coğrafi bağlama uygun, rastgele kriz
-    senaryosu üretir (bkz. modül başındaki "v2 GÜNCELLEMESİ" notu).
-
-    Hedef havuzları `__init__`de BİR KEZ Neo4j'den okunur (betik boyunca
-    sabit kalır — Settlement/Otoyol/Liman/Hastane varlıkları bir war-gaming
-    turu SIRASINDA değişmez, her turda yeniden sorgulamak gereksizdir).
-    """
+    
 
     def __init__(self, db: Neo4jConnection) -> None:
         self._db = db
@@ -305,10 +194,7 @@ class ProceduralInfrastructureCrisis:
             )
 
     def uret(self) -> Tuple[str, str]:
-        """Rastgele bir (senaryo_turu, kriz_metni) üretir — SADECE dolu
-        (en az 1 gerçek varlık içeren) havuzlardan seçim yapar; boş bir
-        havuza (ör. henüz hiç Liman yüklenmemiş bir kurulumda) ASLA
-        düşmez."""
+       
         uygun_tanimlar = [
             (tur, havuz_adi, sablon_fn)
             for (tur, havuz_adi, sablon_fn) in _SENARYO_TANIMLARI
@@ -322,35 +208,17 @@ class ProceduralInfrastructureCrisis:
         return senaryo_turu, sablon_fn(hedef)
 
 
-# ---------------------------------------------------------------------------
-# 3) OTOMATİK HAKEM (Validator) — kullanıcı talebi: "mantıksızlık/halüsinasyon
-#    varsa çöpe at, kotadan düşme"
-# ---------------------------------------------------------------------------
 
-# "kapalı" kelimesi, bir rota/güzergah/yol kelimesiyle AYNI cümlede (basit
-# bir yaklaşıklıkla: aralarında 40 karakterden az mesafede) geçiyorsa, model
-# muhtemelen KAPALI bir güzergahı "önerilen" bir sevkiyat/tahliye yolu gibi
-# sunmuştur — bu, `decision_engine`in AÇIK yol ağı üzerinden GERÇEK Dijkstra
-# hesabı yaptığı göz önüne alınınca (bkz. `_en_yakin_ulasilan_birlikleri_
-# bul`) NORMALDE olmaması gereken bir mantık hatasıdır; ŞÜPHELİ kabul edilip
-# REDDEDİLİR.
 _KAPALI_ROTA_DESENI = re.compile(
     r"(rota|g[uü]zerg[aâ]h|yol)\w*[^.!?]{0,40}\bkapal[ıi]\b|\bkapal[ıi]\b[^.!?]{0,40}(rota|g[uü]zerg[aâ]h|yol)",
     re.IGNORECASE,
 )
-# EN AZ bir öneride "açık" (rotanın/güzergahın AÇIK olduğuna dair) bir
-# ifadenin geçmesi beklenir — kullanıcının "rotası AÇIKTIR ifadesi geçiyor
-# mu?" talebinin DÜZ (case/ek-insensitive) karşılığı; modelin GERÇEK
-# çıktısı "rotası açık", "güzergahı AÇIKTIR", "açık yol ağı üzerinden" gibi
-# ufak varyasyonlar üretebildiğinden TEK bir kelimeye (`açık`) bakılır,
-# TAM cümleye DEĞİL — aksi halde bu kontrol neredeyse HER geçerli cevabı da
-# reddederdi (aşırı katı bir desen, kendi amacını baltalardı).
+
 _ACIK_IFADESI_DESENI = re.compile(r"a[çc][ıi]k", re.IGNORECASE)
 
 
 def gecerli_mi(sonuc: Dict[str, Any]) -> Tuple[bool, str]:
-    """"Otomatik Hakem": bir `/api/analyze-crisis` yanıtının diske
-    yazılmaya DEĞER (mantıklı/tutarlı) olup olmadığına karar verir.
+    
 
     Returns:
         `(gecerli, sebep)` — `gecerli=False` ise `sebep` REDDİN gerekçesini
@@ -372,17 +240,11 @@ def gecerli_mi(sonuc: Dict[str, Any]) -> Tuple[bool, str]:
     return True, "geçerli"
 
 
-# ---------------------------------------------------------------------------
-# API çağrıları (crisis-submit/reset — `api.py`ye SADECE HTTP ile konuşur;
-# bkz. modül başındaki "MİMARİ NOT")
-# ---------------------------------------------------------------------------
+
 
 
 def analiz_et(rapor_metni: str) -> Dict[str, Any]:
-    """`POST /api/analyze-crisis` — başarısızsa `requests.RequestException`
-    (bağlantı hatası) VEYA `requests.HTTPError` (`raise_for_status`, ör.
-    422/503) fırlatır; çağıran taraf (bkz. `main`) bunu YAKALAYIP bir
-    "geçersiz deneme" olarak ele alır, betiği ÇÖKERTMEZ."""
+   
     yanit = requests.post(
         f"{API_TABAN_URL}/api/analyze-crisis",
         json={"rapor_metni": rapor_metni},
@@ -393,13 +255,7 @@ def analiz_et(rapor_metni: str) -> Dict[str, Any]:
 
 
 def senaryoyu_sifirla() -> None:
-    """`POST /api/reset-scenario` — HER denemeden SONRA (geçerli/geçersiz
-    FARK ETMEKSİZİN) çağrılır (bkz. modül başındaki "4) TEMİZLİK" notu).
-    Başarısız olursa betiği DURDURMAZ (sadece uyarı loglar) — bir sonraki
-    senaryonun ÖNCEKİ kalıntılarla karışma riski, betiğin TAMAMEN çökmesinden
-    daha iyi bir ödündür; yine de bu risk AÇIKÇA loglanır, sessizce
-    yutulmaz.
-    """
+    
     try:
         yanit = requests.post(f"{API_TABAN_URL}/api/reset-scenario", timeout=30)
         yanit.raise_for_status()
@@ -408,9 +264,7 @@ def senaryoyu_sifirla() -> None:
 
 
 def kaydet(senaryo_turu: str, rapor_metni: str, sonuc: Dict[str, Any]) -> None:
-    """Geçerli (Otomatik Hakem'den geçmiş) bir kaydı `VERI_SETI_DOSYASI`ye
-    (JSONL — satır başına bir JSON nesnesi) EKLER (append) — betik tekrar
-    çalıştırılırsa önceki toplama oturumunun üzerine YAZILMAZ."""
+    
     kayit = {
         "zaman": datetime.now(timezone.utc).isoformat(),
         "senaryo_turu": senaryo_turu,
@@ -422,9 +276,6 @@ def kaydet(senaryo_turu: str, rapor_metni: str, sonuc: Dict[str, Any]) -> None:
         f.write(json.dumps(kayit, ensure_ascii=False) + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Ana döngü
-# ---------------------------------------------------------------------------
 
 
 def main() -> None:
@@ -444,10 +295,7 @@ def main() -> None:
     basarili = 0
     deneme = 0
 
-    # KURAL 1 (SINIR/KOTA): bu `while` KOŞULSUZ DEĞİLDİR — İKİ bağımsız üst
-    # sınırdan (geçerli sayısı VEYA toplam deneme sayısı) HANGİSİ önce
-    # dolarsa döngü ORADA kesin olarak sonlanır; sonsuz döngü YAPISAL
-    # olarak MÜMKÜN DEĞİLDİR.
+    
     while basarili < MAX_SUCCESSFUL_SCENARIOS and deneme < MAX_TOTAL_DENEME:
         deneme += 1
         senaryo_turu, rapor_metni = uretici.uret()
@@ -471,7 +319,7 @@ def main() -> None:
             basarili += 1
             print(f"  ✅ Kaydedildi ({basarili}/{MAX_SUCCESSFUL_SCENARIOS})")
 
-        # KURAL 4 (TEMİZLİK VE BEKLEME): geçerli/geçersiz FARK ETMEKSİZİN.
+       
         senaryoyu_sifirla()
         time.sleep(DONGU_BEKLEME_SANIYE)
 
