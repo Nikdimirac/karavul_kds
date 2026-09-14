@@ -1,31 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-mlops/golden_dataset/generate_dataset.py
-===========================================
-KARAVUL — ALTIN VERİ SETİ — FAZ 2: ASIL 1000 SENARYOLUK ÜRETİM DÖNGÜSÜ.
 
-Kullanıcı onayıyla (pilot test HITL incelemesinden SONRA) başlatıldı. Bu
-betik, `mlops/golden_dataset/pilot_test.py`nin KANITLANMIŞ yöntemini
-(gerçek `/api/analyze-crisis` çağrısı → GERÇEK `durum_ozeti` (GraphRAG) →
-`altin_cikti_uret()` ile DETERMİNİSTİK Altın Çıktı — serbest LLM üretimi
-DEĞİL) 1000 hedefine ULAŞANA kadar tekrarlar.
-
-CANLI HATA (bu betik yazılırken BULUNDU VE DÜZELTİLDİ) — `train_model.py`
-UYUMSUZLUĞU: `train_model.py::militarize()`, `taktiksel_oneriler[0]`
-üzerinde çalışıp "rotası AÇIKTIR" → "intikal edilecektir", "en uygun
-birlik olarak değerlendirilir" → "İCRA BİRLİĞİ OLARAK GÖREVLENDİRİLMİŞTİR"
-gibi EMİR KİPİNE çeviren regex dönüşümleri uygular — bu TAM OLARAK
-kullanıcının Altın Veri Seti için YASAKLADIĞI "KDS karar alır/emir verir"
-davranışını, ESKİ (war_gaming.py) veri için TASARLANMIŞ bir kod yolu
-üzerinden GERİ SOKARDI. Çözüm: bu betiğin yazdığı HER kayıt `"kaynak":
-"golden_v1"` alanı taşır; `train_model.py::load_and_format_dataset` bu
-alanı görünce `militarize()`yi ATLAR (bkz. o dosyadaki değişiklik) — Altın
-Çıktı, YAZILDIĞI GİBİ (hiçbir emir-kipi dönüşümü OLMADAN) eğitilir.
-
-Çalıştırmak için (API+Neo4j+Ollama ayaktayken, saatler sürebilir):
-    python -m mlops.golden_dataset.generate_dataset
-    python -m mlops.golden_dataset.generate_dataset --hedef 1000 --devam-et
-"""
 
 from __future__ import annotations
 
@@ -45,15 +18,15 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from src.core.database import Neo4jConnection, Neo4jConnectionError  # noqa: E402
+from src.core.database import Neo4jConnection, Neo4jConnectionError  
 
-from mlops.golden_dataset.pilot_test import (  # noqa: E402
+from mlops.golden_dataset.pilot_test import (  
     API_TABAN_URL,
     _altin_yanit_insa_et,
     _analiz_et,
     _sifirla,
 )
-from mlops.golden_dataset.scenario_generator import (  # noqa: E402
+from mlops.golden_dataset.scenario_generator import (  
     RISK_MATRIX,
     OlayTuru,
     _yasakli_eylem_kalibi_var_mi,
@@ -70,14 +43,7 @@ denemeler API/Ollama hatasıyla ya da `durum_ozeti` boş dönerek başarısız
 olabilir; sonsuz döngüye girmeden AÇIKÇA durur."""
 
 
-# ============================================================================
-# GERÇEK İLÇE ADI ÇÖZÜMLEME (war_gaming.py ile AYNI desen — bkz. o
-# dosyadaki `_yerlesim_konum_ifadesi`): doğal, GERÇEK bir yer adı kullanmak
-# için Settlement grafından rastgele bir ilçe çekilir; bulunamazsa (bkz.
-# "Elazığ ~ Elâzığ" imla farkı, `nationwide_unit_seeder.py`de belgelendi)
-# GENEL ama YİNE DE doğru bir ifadeye (SESSİZCE UYDURMA isim YERİNE)
-# düşülür.
-# ============================================================================
+
 
 _ilce_onbellegi: Dict[str, List[str]] = {}
 
@@ -106,13 +72,6 @@ def _konum_ifadesi(db: Neo4jConnection, il: str) -> str:
     return f"{il} il merkezinde"
 
 
-# ============================================================================
-# RAPOR METNİ ŞABLONLARI (war_gaming.py'nin şablon tarzıyla AYNI —
-# rastgele sayısal detaylarla her seferinde benzersiz metin — ama RISK_
-# MATRIX'e göre KISITLANMIŞ: `main()`deki seçim döngüsü zaten SADECE
-# `gecerli_olay_turleri(il)` içindeki türleri dener, DEPREM büyüklüğü de
-# `profil.gercekci_max_deprem_mw`yi ASLA AŞMAZ.)
-# ============================================================================
 
 
 def _rapor_uret(db: Neo4jConnection, il: str, olay_turu: OlayTuru) -> Tuple[str, Optional[float]]:
@@ -219,14 +178,11 @@ def _rapor_uret(db: Neo4jConnection, il: str, olay_turu: OlayTuru) -> Tuple[str,
         )
         return metin, None
 
-    # OlayTuru.SALDIRI (genel güvenlik olayı)
+  
     metin = f"{konum} silahlı bir saldırı bildirildi, bölgede çok sayıda güvenlik ekibi sevk edildi."
     return metin, None
 
 
-# ============================================================================
-# ANA DÖNGÜ
-# ============================================================================
 
 
 def _mevcut_kayit_sayisi() -> int:
@@ -301,10 +257,6 @@ def main() -> int:
     try:
         while basarili < hedef and deneme < maks_deneme:
             if deneme > 0 and args.bekleme_sn > 0:
-                # HAFİF MOD: art arda Ollama/Neo4j çağrıları arasında RAM'in
-                # toparlanması için sabit bir bekleme — her denemenin
-                # BAŞINDA (bir önceki denemenin sonucu ne olursa olsun:
-                # başarı, RISK_MATRIX reddi, API hatası...) uygulanır.
                 time.sleep(args.bekleme_sn)
             deneme += 1
             il = random.choice(iller)
