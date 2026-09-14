@@ -1,26 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-mlops/promote_candidate.py
-============================
-KARAVUL — SÜREKLİ ÖĞRENME DÖNGÜSÜNDEKİ TEK "CANLIYA YAZAN" ADIM.
 
-`mlops/orchestrator.py` HİÇBİR ZAMAN üretim (`karavul-kurmay`) Ollama
-etiketine dokunmaz — SADECE `karavul-kurmay-candidate` adlı AYRI bir etiket
-üretir ve `mlops/reports/`e bir değerlendirme raporu yazar. Adayı canlıya
-almak (promote), BİLİNÇLİ olarak SADECE bu betikle, İNSANIN kendi isteğiyle,
-İNTERAKTİF bir onay adımından SONRA olur (bkz. `mlops/config.py`daki
-"KAPILI (onaylı) geçiş" kararı — kullanıcının kendi seçimi).
-
-GÜVENCE — GERİ ALMA: promosyondan ÖNCE, o anki üretim modeli
-`karavul-kurmay-backup-<UTC zaman damgası>` adıyla YEDEKLENİR (bkz.
-`ollama cp` — sadece bir manifest/etiket kopyalar, disk alanı İKİYE
-KATLANMAZ). Bir sorun fark edilirse geri almak için:
-    ollama cp karavul-kurmay-backup-<zaman damgası> karavul-kurmay
-
-Kullanım (proje kökünden, elle):
-    python -m mlops.promote_candidate
-    python -m mlops.promote_candidate --onay   # interaktif "EVET" sorusunu atla (CI/otomasyon İÇİN DEĞİL — bkz. main())
-"""
 
 from __future__ import annotations
 
@@ -30,16 +8,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# bkz. `eval_harness.py`deki AYNI korumanın AYNI gerekçesi (Windows konsolu
-# + emoji/Türkçe karakter -> UnicodeEncodeError).
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from mlops.config import CANDIDATE_TAG, URETIM_ETIKETI  # noqa: E402
-from mlops.state import durumu_yukle  # noqa: E402
+from mlops.config import CANDIDATE_TAG, URETIM_ETIKETI  
+from mlops.state import durumu_yukle  
 
 
 def _ollama_liste() -> str:
