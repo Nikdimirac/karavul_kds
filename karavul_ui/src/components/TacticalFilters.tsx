@@ -5,12 +5,7 @@ export interface KatmanGorunurlugu {
   limanlar: boolean
   askeriUsler: boolean
   hastaneler: boolean
-  // BULGU DÜZELTMESİ (kullanıcı tespiti — "mavi yıldızlı [Polis] konumlar
-  // için filtre yok"): eskiden bu katman SADECE `aktif_birlikler` içindeki
-  // 'Askeri Birlik' tipini kontrol ediyordu — Polis/AFAD/İtfaiye/Sağlık/
-  // Ağır Mühendislik/Lojistik/Arama Kurtarma tipleri HİÇBİR kutucuğa bağlı
-  // DEĞİLDİ, her zaman çizilirdi. Artık TEK bir "Birlikler" kutucuğu
-  // `aktif_birlikler`deki TÜM tipleri (tip ayrımı yapmadan) kontrol eder.
+  
   birlikler: boolean
   yollar: boolean
   yerlesimBolgeleri: boolean
@@ -41,7 +36,6 @@ interface TacticalFiltersProps {
   onDegistir: (anahtar: keyof KatmanGorunurlugu) => void
 }
 
-/** Sağ alt köşede yüzen, katman görünürlüğünü kontrol eden taktiksel filtre paneli. */
 export default function TacticalFilters({ katmanlar, onDegistir }: TacticalFiltersProps) {
   return (
     <div className="pointer-events-auto absolute bottom-4 right-4 z-20 w-48 overflow-hidden rounded-lg border border-cmd-border/80 bg-cmd-900/75 shadow-lg shadow-black/40 backdrop-blur-md">
