@@ -7,7 +7,6 @@ interface TopBarProps {
   baglantiSaglikli: boolean
 }
 
-/** Üst şerit: sistem başlığı (sol) + kritik metrik kartları (sağ). */
 export default function TopBar({ durum, baglantiSaglikli }: TopBarProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between p-4">
