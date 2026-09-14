@@ -1,20 +1,4 @@
-"""
-Kriz ve Afet Yönetimi Karar Destek Sistemi
-===========================================
-Yerel Ollama LLM entegrasyonu ile ham kriz metinlerinden (haber, telsiz
-raporu, sosyal medya vb.) Bilgi Grafı varlıklarını (Node) ve aralarındaki
-ilişkileri (Edge) çıkaran (Named Entity/Relation Extraction) modül.
 
-`OllamaParser`, LangChain'in `ChatOllama` sarmalayıcısı üzerinden yerelde
-çalışan bir Ollama modeline (ör. llama3, mistral) bağlanır; modele
-`src.core.models` içindeki şemayı bir `PromptTemplate` ile açıklar ve
-dönen JSON çıktısını ilgili Pydantic sınıflarına doğrulayarak/dönüştürerek
-teslim eder.
-
-Not: Bu dosya, veri girişi (data ingestion) katmanının iskeletini kurar;
-prompt mühendisliği ve hata toleransı ileride üretim kalitesine göre
-iyileştirilebilir.
-"""
 
 from __future__ import annotations
 
@@ -33,10 +17,9 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 try:
-    # Guncel langchain-community siniflandirmasi
     from langchain_community.chat_models import ChatOllama
-except ImportError:  # pragma: no cover - eski paket surumleri icin fallback
-    from langchain_community.llms import Ollama as ChatOllama  # type: ignore
+except ImportError:  
+    from langchain_community.llms import Ollama as ChatOllama 
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -70,32 +53,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
-# ---------------------------------------------------------------------------
-# DONANIM (GPU/CPU) OPTIMIZASYONU — `decision_engine.py`deki AYNI başlıklı
-# sabitlerle (ve gerekçesiyle) TUTARLI olacak şekilde BAĞIMSIZ tanımlanır
-# (iki modül birbirini import ETMEZ, bkz. bu projede tekrar eden "iki modül
-# bağımsız kalsın" deseni — ör. `real_osm_loader.KILCAL_HIGHWAY_TIPLERI`).
-# TUTARLILIK ÖNEMLİDİR: bu modül (`OllamaParser`) ve `DecisionEngine` AYNI
-# fiziksel Ollama modelini (ör. "llama3.1") FARKLI çağrı noktalarından
-# kullanır; ikisi FARKLI `num_gpu`/`num_thread` değerleriyle çağırırsa,
-# Ollama modeli her seferinde FARKLI bir `options` kümesiyle yeniden
-# yükleyebilir (gereksiz gecikme) — bu yüzden AYNI env-değişkeni adları VE
-# AYNI varsayılan hesaplama mantığı kullanılır.
 _OLLAMA_NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "999"))
 _OLLAMA_NUM_THREAD = int(os.getenv("OLLAMA_NUM_THREAD", str(min(16, os.cpu_count() or 8))))
 
 _OLLAMA_ISTEK_ZAMAN_ASIMI_SANIYE = float(os.getenv("OLLAMA_ISTEK_ZAMAN_ASIMI_SANIYE", "400"))
-"""KATI LLM TIMEOUT (bkz. `decision_engine.py`deki AYNI
-başlıklı, aynı 400 sn'lik değere sahip sabit ve gerekçesi; BİLİNÇLİ olarak
-AYNI değer kullanılır ki iki modül AYNI Ollama modelini farklı zaman
-aşımlarıyla çağırıp thrashing'e yol açmasın). Bu değer `Ollama(timeout=
-...)` üzerinden LangChain'in HTTP isteğine doğrudan aktarılır — çökmüş/
-asılı bir Ollama sürecine karşı gerçek bir ağ-seviyesi güvenlik ağıdır."""
-
-
-# ---------------------------------------------------------------------------
-# JSON anahtari -> Pydantic sinifi eslemesi
-# ---------------------------------------------------------------------------
+"
 
 ENTITY_MODEL_MAP: Dict[str, Type[BaseNode]] = {
     "facilities": Facility,
@@ -108,32 +70,15 @@ ENTITY_MODEL_MAP: Dict[str, Type[BaseNode]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Dinamik zaman enjeksiyonu
-# ---------------------------------------------------------------------------
-# LLM'in gorece "su an" kavrami yoktur ve metinde tarih belirtilmemisse ya
-# uydurur ya da (daha kotusu) prompt icindeki few-shot ornekten tarihi
-# kopyalar. Bunu onlemek icin her `extract_entities` cagrisinda GERCEK sistem
-# zamani hesaplanip prompt'a `{current_time}` degiskeni olarak enjekte edilir.
-# Sistem Turkiye odakli oldugundan (TR, DST uygulamiyor) sabit +03:00 kullanilir.
 
 _TR_TIMEZONE = timezone(timedelta(hours=3))
 
 
 def _current_time_iso() -> str:
-    """Su anki zamani, Turkiye saat dilimiyle (UTC+03:00) ISO 8601 olarak dondurur."""
     return datetime.now(_TR_TIMEZONE).isoformat(timespec="seconds")
 
 
-# ---------------------------------------------------------------------------
-# Turkce/buyuk-kucuk harf toleransli Enum normalizasyonu
-# ---------------------------------------------------------------------------
-# LLM ciktisi "Hasarli", "hasarlı", "HASARLI" gibi varyasyonlar uretebilir;
-# ancak Pydantic Enum alanlari (ör. FacilityStatus.HASARLI = "Hasarlı") tam
-# esleme bekler. Asagidaki yardimcilar, model(**item) ile dogrulamadan ONCE
-# ham string degerleri, Turkce karakter/buyuk-kucuk harf farkini yok sayarak
-# ilgili Enum uyesine cevirir. Eslesme bulunamazsa deger degistirilmeden
-# birakilir; nihai dogrulama (ve hata mesaji) yine Pydantic'e aittir.
+
 
 _TURKISH_CHAR_MAP = str.maketrans(
     {
@@ -148,11 +93,7 @@ _TURKISH_CHAR_MAP = str.maketrans(
 
 
 def normalize_tr(value: str) -> str:
-    """Karsilastirma icin sadelestirilmis anahtar uretir: Turkce karakterleri
-    ASCII karsiliklarina cevirir, kucuk harfe indirger ve bosluklari siler.
-
-    Ornek: "Hasarlı", "hasarli", " HASARLI " -> "hasarli"
-    """
+ 
     return value.strip().translate(_TURKISH_CHAR_MAP).lower()
 
 
@@ -163,20 +104,13 @@ def _enum_lookup(enum_cls: Type[Enum]) -> Dict[str, Enum]:
 
 
 def normalize_enum_value(enum_cls: Type[Enum], raw_value: Any) -> Any:
-    """Ham bir degeri (LLM ciktisi), Turkce karakter/buyuk-kucuk harf farkini
-    tolere ederek ilgili Enum uyesine cevirir.
-
-    Zaten dogru Enum uyesiyse veya string degilse oldugu gibi dondurulur.
-    Normalize edilmis anahtar eslesmezse ham deger degistirilmeden dondurulur
-    (boylece cagiran taraf, Pydantic'in normal ValidationError'una duser).
-    """
+   
     if raw_value is None or isinstance(raw_value, enum_cls) or not isinstance(raw_value, str):
         return raw_value
     return _enum_lookup(enum_cls).get(normalize_tr(raw_value), raw_value)
 
 
 def _extract_enum_type(annotation: Any) -> Optional[Type[Enum]]:
-    """Bir alan tip anotasyonundan (dogrudan veya Optional[...] icinden) Enum sinifini cikarir."""
     if isinstance(annotation, type) and issubclass(annotation, Enum):
         return annotation
     if get_origin(annotation) is Union:
@@ -187,13 +121,7 @@ def _extract_enum_type(annotation: Any) -> Optional[Type[Enum]]:
 
 
 def sanitize_enum_fields(model_cls: Type[Any], item: Dict[str, Any]) -> Dict[str, Any]:
-    """Bir varlik/iliski dict'indeki tum Enum alanlarini, ilgili Pydantic
-    sinifinin alan tanimlarina bakarak normalize eder (bkz. `normalize_enum_value`).
-
-    Alanlarin hangilerinin Enum oldugu `model_cls.model_fields` uzerinden
-    otomatik tespit edilir; bu sayede yeni bir Enum alani eklendiginde bu
-    fonksiyonun guncellenmesi gerekmez.
-    """
+   
     sanitized = dict(item)
     for field_name, field_info in model_cls.model_fields.items():
         if field_name not in sanitized:
@@ -204,30 +132,11 @@ def sanitize_enum_fields(model_cls: Type[Any], item: Dict[str, Any]) -> Dict[str
     return sanitized
 
 
-# ---------------------------------------------------------------------------
-# Eksik/`null` ZORUNLU alanlar icin savunmaci varsayilanlar
-# ---------------------------------------------------------------------------
-# SORUN: Prompt'taki "KISA/EKSIK METIN KURALI" modele, emin olmadigi SAYISAL
-# alanlar icin `null` yazmasini SOYLER — ama `src.core.models` icindeki bir
-# cok alan (ör. Facility.kapasite, Event.etki_alani_km/siddet) Pydantic'te
-# REQUIRED'dir (Optional DEGIL). Model bu talimata uyup `null` dondurdugunde,
-# SADECE prompt guncellemesi yeterli OLMAZDI: Pydantic dogrulamasi yine de
-# ValidationError firlatir ve `_coerce_node` KAYDIN TAMAMINI sessizce atardi
-# — ki kullanicinin sikayet ettigi "kisa metin cope atiliyor" davranisi tam
-# olarak buydu. Bu yuzden modele guvenmek YETMEZ: `_coerce_node`, Pydantic
-# dogrulamasindan ONCE, asagidaki eslemedeki her REQUIRED alan icin item'da
-# eksik/`None` bir deger varsa onu makul bir varsayilanla doldurur; boylece
-# "eksik veri = kaydin reddi" DEGIL "eksik veri = varsayilan deger" olur.
 _REQUIRED_FIELD_FALLBACKS: Dict[Type[BaseNode], Dict[str, Any]] = {
     Facility: {"kapasite": 0.0},
     Infrastructure: {"uzunluk_km": 0.0},
     EnergyInfrastructure: {"kapasite_mw": 0.0},
-    # Bu iki alan `kapsama_yaricapi_km: float = Field(default=0, ...)`
-    # seklinde Pydantic-seviyesi bir varsayilana SAHIPTIR - AMA bu
-    # varsayilan SADECE alan TAMAMEN EKSIKSE devreye girer; LLM alani
-    # ACIKCA `null`/`None` olarak GONDERDIGINDE Pydantic bunu "deger
-    # VERILDI ama gecersiz (None, float degil)" sayar ve REDDEDER. Diger
-    # tum alanlar gibi `apply_required_field_fallbacks`a devredilir.
+    
     CommunicationNetwork: {"kapsama_yaricapi_km": 0.0, "batarya_omru_saat": 0.0},
     ResourceHub: {"stok_seviyesi_yuzde": 0.0, "tukenme_hizi_gun": 0.0},
     Unit: {"personel_sayisi": 0},
@@ -236,13 +145,7 @@ _REQUIRED_FIELD_FALLBACKS: Dict[Type[BaseNode], Dict[str, Any]] = {
 
 
 def apply_required_field_fallbacks(model_cls: Type[BaseNode], item: Dict[str, Any]) -> Dict[str, Any]:
-    """`_REQUIRED_FIELD_FALLBACKS`e gore, `item` icinde eksik veya `None`
-    olan REQUIRED alanlari makul varsayilanlarla doldurur (bkz. yukaridaki
-    "SORUN" aciklamasi). Sadece "bilinmiyor -> guvenli varsayilan" mantigi
-    UYGULANABILEN sayisal/durum alanlari icin tanimlidir; `event_type`/
-    `facility_type` gibi kimlik-tanimlayici alanlar icin KASITLI OLARAK
-    varsayilan YOKTUR (bunlar icin gercekten belirlenemiyorsa kayit haklı
-    olarak Pydantic tarafindan reddedilir — bkz. modul docstring'i)."""
+  
     varsayilanlar = _REQUIRED_FIELD_FALLBACKS.get(model_cls)
     if not varsayilanlar:
         return item
@@ -254,29 +157,12 @@ def apply_required_field_fallbacks(model_cls: Type[BaseNode], item: Dict[str, An
 
 
 def _gecersiz_event_type_ise_varsayilana_cek(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Kanitlanmis bir bosluk icin savunma: prompt'taki "OLAY
-    TURU (EVENT_TYPE) SINIFLANDIRMA KURALI" modele `event_type` icin
-    SADECE gecerli `EventType` degerleri (bkz. `models.EventType`) oldugunu
-    ve EMIN OLUNMAYAN durumlarda "Patlama" secilmesi gerektigini KESIN
-    OLARAK soylese bile, kucuk/yerel bir model (ör. llama3) YINE DE
-    kendi kategorisini uydurabiliyor (ör. "Kopru Yıkımı", "Yikim",
-    "Vurulma" — hicbiri gecerli degil). `sanitize_enum_fields` (bkz.
-    `normalize_enum_value`) SADECE Turkce karakter/buyuk-kucuk harf
-    farkini tolere eder, TAMAMEN UYDURULMUS bir kategoriyi kurtaramaz.
-
-    Bu yuzden, SADECE `Event.event_type` icin (sistemin en kritik alani —
-    bir Event'in TAMAMEN kaybolmasi bir Facility/Infrastructure'in
-    kaybolmasindan cok daha agir bir durumdur: kriz raporunun KENDISI
-    gorunmez olur), `sanitize_enum_fields` SONRASI bile hala gecerli bir
-    `EventType` degerine karsilik gelmeyen bir `event_type`, modelin
-    kendisine soylenen "EMIN OLAMADIGIN durumlarda Patlama SEC" talimatinin
-    KOD SEVIYESINDE bir GUVENCESI olarak "Patlama"ya cekilir — Event kaydi
-    ASLA SADECE bu yuzden reddedilip KAYBOLMAZ."""
+   
     ham_deger = item.get("event_type")
     if ham_deger is None or isinstance(ham_deger, EventType):
         return item
     if normalize_tr(str(ham_deger)) in _enum_lookup(EventType):
-        return item  # sanitize_enum_fields zaten dogru uyeye cevirecek.
+        return item  
     logger.warning(
         "Gecersiz event_type '%s' tespit edildi; 'OLAY TURU SINIFLANDIRMA KURALI' geregi "
         "varsayilan '%s'e cekiliyor (kayit ARTIK REDDEDILMEYECEK).",
@@ -287,10 +173,7 @@ def _gecersiz_event_type_ise_varsayilana_cek(item: Dict[str, Any]) -> Dict[str, 
     return duzeltilmis
 
 
-# `durum`/`mevcut_durum` icin GECERSIZ deger geldiginde cekilecek varsayilan
-# enum uyesi: semantik olarak "operasyonel DEGIL/erisilemez/kapali" anlamina
-# gelen tek ortak uye budur (OperationalStatus/FacilityStatus'ta ayri bir
-# "Kapali" degeri YOK — bkz. `_gecersiz_durum_ise_varsayilana_cek` docstring'i).
+
 _GECERSIZ_DURUM_VARSAYILANI: Dict[Type[Any], Any] = {
     OperationalStatus: OperationalStatus.HASARLI,
     FacilityStatus: FacilityStatus.HASARLI,
@@ -298,28 +181,7 @@ _GECERSIZ_DURUM_VARSAYILANI: Dict[Type[Any], Any] = {
 
 
 def _gecersiz_durum_ise_varsayilana_cek(model_cls: Type[BaseNode], item: Dict[str, Any]) -> Dict[str, Any]:
-    """CANLI RAPORDA GORULEN bir baska bosluk icin savunma: LLM, `durum`
-    (TUM varliklarda ortak, `OperationalStatus`) veya `mevcut_durum`
-    (SADECE Facility, `FacilityStatus`) icin bazen enum-DISI bir kelime
-    uretebiliyor (ör. "Sekte", "Ulasilamiyor", "Kismi Kesinti") — ne
-    `OperationalStatus` (Aktif/Hasarli/Yok Edildi) NE DE `FacilityStatus`
-    (Aktif/Hasarli/Yok Edildi) icinde boyle bir deger YOKTUR. `sanitize_
-    enum_fields` (bkz. `normalize_enum_value`) SADECE Turkce karakter/
-    buyuk-kucuk harf farkini tolere eder; TAMAMEN FARKLI bir kelimeyi
-    (`_enum_lookup` icinde HICBIR karsiligi olmayan) KURTARAMAZ ve kayit
-    Pydantic tarafindan REDDEDILIR — `_gecersiz_event_type_ise_varsayilana_
-    cek` ile AYNI sinif bir bosluk.
-
-    Duzeltme: enum-disi bir `durum`/`mevcut_durum`, kullanicinin tarif
-    ettigi "Kapali (Closed)" niyetine EN YAKIN mevcut uye olan "Hasarli"ya
-    (Aktif/Yok Edildi DEGIL — "Hasarli" varlik hala var ama OPERASYONEL
-    DEGIL/erisilemez anlamina gelir, "Sekte/Ulasilamiyor" ile en tutarli
-    eslesmedir) cekilir. AYRICA, eger `model_cls` bir `Infrastructure` ise
-    (yol/kopru/tunel/vb.), `acik_mi` da KESIN olarak `False`'a zorlanir —
-    boylece "yol durumu icin enum-disi bir kelime -> Kapali" davranisi hem
-    `durum` hem de haritanin FIILEN kullandigi `acik_mi` bayraginda TUTARLI
-    sekilde yansir (bkz. `app.py` -> `fetch_street_points`/`_kriz_katmani_
-    olustur` -> `acik_mi=False` olan HER SEY kirmizi/kriz katmaninda cizilir)."""
+   
     duzeltilmis = dict(item)
     degisti = False
     for alan_adi, enum_cls in (("durum", OperationalStatus), ("mevcut_durum", FacilityStatus)):
@@ -327,7 +189,7 @@ def _gecersiz_durum_ise_varsayilana_cek(model_cls: Type[BaseNode], item: Dict[st
         if ham_deger is None or isinstance(ham_deger, enum_cls):
             continue
         if normalize_tr(str(ham_deger)) in _enum_lookup(enum_cls):
-            continue  # sanitize_enum_fields zaten dogru uyeye cevirecek.
+            continue  
         varsayilan = _GECERSIZ_DURUM_VARSAYILANI[enum_cls]
         logger.warning(
             "Gecersiz %s '%s' tespit edildi; en yakin karsiligi olan '%s'e cekiliyor "
@@ -341,25 +203,7 @@ def _gecersiz_durum_ise_varsayilana_cek(model_cls: Type[BaseNode], item: Dict[st
     return duzeltilmis
 
 
-# Kanitlanmis bir bosluk icin savunma (Pydantic ValidationError:
-# `input_value='Tıbbi'`): LLM, `Unit.unit_type` icin
-# GERCEK bir kategori (Saglik/Arama Kurtarma/Lojistik) KASTETMESINE
-# RAGMEN, o kategorinin `UnitType` Enum'undaki TAM kelimesini DEGIL, dogal
-# dildeki YAYGIN bir es-anlamlisini ("Tıbbi", "Medikal", "AKUT") yazabilir.
-# `sanitize_enum_fields` (bkz. `normalize_enum_value`) SADECE Turkce
-# karakter/buyuk-kucuk harf farkini tolere eder — "Tıbbi" ile "Saglik"
-# TAMAMEN FARKLI kelimeler oldugundan bu normalizasyon bunu KURTARAMAZ ve
-# kayit (bir Saglik/UMKE ekibi!) sessizce REDDEDILIRDI. `_gecersiz_durum_
-# ise_varsayilana_cek` ile AYNI SINIF bir bosluk, ama COZUMU FARKLIDIR:
-# orada "bilinmeyen bir deger geldi, EN GUVENLI varsayilana cek" mantigi
-# uygulanirken, burada deger ASLINDA BILINIYOR (sadece kelime secimi
-# farkli) — bu yuzden rastgele bir varsayilana DEGIL, DOGRU es-anlamli
-# UnitType uyesine (bkz. `models.UnitType` — "Tıbbi" gibi SAGLIK'in duz
-# es-anlamlilari icin YENI bir Enum uyesi EKLENMEDI, tam da bu tabloyla
-# COZULMESI amaclandigi icin) esletilir. Gercekten BILINMEYEN (tabloda da
-# olmayan) bir deger ise DOKUNULMAZ — bu durumda `unit_type` bir kimlik-
-# tanimlayici alan oldugundan (bkz. `apply_required_field_fallbacks`
-# docstring'i) Pydantic'in dogal reddi GECERLI KALIR.
+
 _UNIT_TYPE_ES_ANLAMLILAR: Dict[str, UnitType] = {
     normalize_tr("Tibbi"): UnitType.SAGLIK,
     normalize_tr("Medikal"): UnitType.SAGLIK,
@@ -378,43 +222,25 @@ _UNIT_TYPE_ES_ANLAMLILAR: Dict[str, UnitType] = {
     normalize_tr("Ikmal Birimi"): UnitType.LOJISTIK,
     normalize_tr("Tedarik"): UnitType.LOJISTIK,
     normalize_tr("Nakliye"): UnitType.LOJISTIK,
-    # LLM bazen İTFAİYE'nin kendisini değil, onun GÖREV tanımını ("Yangın
-    # Birimi"/"Yangın Ekibi") unit_type olarak üretiyor — "Tıbbi"→SAGLIK
-    # ile AYNI sınıf, düz es-anlamlı bir kayma.
     normalize_tr("Yangin"): UnitType.ITFAIYE,
     normalize_tr("Yangin Birimi"): UnitType.ITFAIYE,
     normalize_tr("Yangin Ekibi"): UnitType.ITFAIYE,
-    # bkz. `models.UnitType.SAHIL_GUVENLIK`.
     normalize_tr("Deniz Kuvvetleri"): UnitType.SAHIL_GUVENLIK,
     normalize_tr("Sahil Koruma"): UnitType.SAHIL_GUVENLIK,
 }
 
 
 def _gecersiz_unit_type_ise_es_anlamlisina_cek(item: Dict[str, Any]) -> Dict[str, Any]:
-    """`Unit.unit_type` icin `_UNIT_TYPE_ES_ANLAMLILAR`de karsiligi olan
-    bir es-anlamli deger geldiyse, dogru `UnitType` uyesine cevirir. Zaten gecerli bir `UnitType`
-    degeriyse (`sanitize_enum_fields` zaten cevirecek) veya tabloda hic
-    karsiligi yoksa (gercekten bilinmeyen kategori) DEGISTIRMEDEN doner."""
+
     ham_deger = item.get("unit_type")
     if ham_deger is None or isinstance(ham_deger, UnitType) or not isinstance(ham_deger, str):
         return item
     anahtar = normalize_tr(ham_deger)
     if anahtar in _enum_lookup(UnitType):
-        return item  # zaten gecerli (sadece TR-karakter/buyuk-kucuk farki) - sanitize_enum_fields halleder.
+        return item  
     es_anlamli = _UNIT_TYPE_ES_ANLAMLILAR.get(anahtar)
     if es_anlamli is None:
-        # Kanitlanmis bir bosluk icin savunma ("Açil Arama Kurtarma Ekibi"
-        # (Unit) doğrulanamadı ve ATLANDI):
-        # yukarıdaki TAM eşleşme, LLM'in geçerli bir kategoriye ("Arama
-        # Kurtarma") önek ("Açil"/"Acil") ve/veya sonek ("Ekibi") EKLEYEREK
-        # ürettiği (ki bu YAYGIN bir LLM davranışıdır) varyantları
-        # YAKALAYAMIYORDU — "acilaramakurtarmaekibi" hiçbir tabloda BİREBİR
-        # yoktu, oysa doğru kategori ("aramakurtarma") metnin İÇİNDE
-        # AÇIKÇA geçiyordu. Bu yüzden TAM eşleşme başarısız olursa, hem
-        # geçerli `UnitType` değerlerini hem `_UNIT_TYPE_ES_ANLAMLILAR`
-        # anahtarlarını ALT-DİZİ (substring) olarak arayan bir ikinci
-        # kademe denenir — birden fazla aday eşleşirse EN UZUN (en
-        # ayırt edici) aday seçilir.
+       
         adaylar: Dict[str, UnitType] = {**_enum_lookup(UnitType), **_UNIT_TYPE_ES_ANLAMLILAR}
         eslesenler = [
             (aday_anahtar, deger) for aday_anahtar, deger in adaylar.items()
@@ -434,11 +260,6 @@ def _gecersiz_unit_type_ise_es_anlamlisina_cek(item: Dict[str, Any]) -> Dict[str
     return duzeltilmis
 
 
-# `_UNIT_TYPE_ES_ANLAMLILAR`/`_gecersiz_unit_type_ise_es_
-# anlamlisina_cek` İLE BİREBİR AYNI desen, `CommunicationNetwork.
-# network_type` için. "İletişim Merkezi" gibi genel/tanımlayıcı bir ifade,
-# somut `CommunicationNetworkType` üyelerinden (Baz İstasyonu/Fiber/Uydu
-# Terminali) EN GENEL/EN YAYGIN olanına (Baz İstasyonu) eşlenir.
 _COMMUNICATION_NETWORK_TYPE_ES_ANLAMLILAR: Dict[str, CommunicationNetworkType] = {
     normalize_tr("Iletisim Merkezi"): CommunicationNetworkType.BAZ_ISTASYONU,
     normalize_tr("Telsiz Istasyonu"): CommunicationNetworkType.BAZ_ISTASYONU,
@@ -449,10 +270,7 @@ _COMMUNICATION_NETWORK_TYPE_ES_ANLAMLILAR: Dict[str, CommunicationNetworkType] =
 
 
 def _gecersiz_network_type_ise_es_anlamlisina_cek(item: Dict[str, Any]) -> Dict[str, Any]:
-    """`CommunicationNetwork.network_type` icin `_gecersiz_unit_type_ise_
-    es_anlamlisina_cek` ile BİREBİR AYNI mantık (TAM eşleşme -> alt-dize
-    eşleşme -> DEĞİŞTİRME) — bkz. o fonksiyonun docstring'i, burada
-    TEKRARLANMAZ."""
+   
     ham_deger = item.get("network_type")
     if ham_deger is None or isinstance(ham_deger, CommunicationNetworkType) or not isinstance(ham_deger, str):
         return item
@@ -482,16 +300,6 @@ def _gecersiz_network_type_ise_es_anlamlisina_cek(item: Dict[str, Any]) -> Dict[
     return duzeltilmis
 
 
-# AYNI desen, `ResourceHub.resource_type` için. "Kaynak" TEK
-# BAŞINA hangi somut `ResourceType`i (Yakıt/Gıda/Su/Tıbbi Malzeme/
-# Mühimmat) kastettiğini KESİN OLARAK BELİRTMEZ — bir kriz/afet
-# bağlamında EN SIK karşılaşılan/EN GENEL lojistik ihtiyaç Yakıt
-# olduğundan (araç/jeneratör ikmali), BİLİNÇLİ bir EN-İYİ-TAHMİN
-# varsayılanı olarak Yakıt'a eşlenir — tıpkı "Kemalpaşa" gibi GERÇEKTEN
-# belirsiz durumlarda "tahmin ÜRETME" ilkesinin AKSİNE, burada kayıp bir
-# koordinat DEĞİL sadece bir alt-kategori söz konusudur; hiç
-# eşlenmemesi (kaydın TAMAMEN kaybolması) yanlış-ama-makul bir alt-tür
-# tahmininden DAHA KÖTÜDÜR.
 _RESOURCE_TYPE_ES_ANLAMLILAR: Dict[str, ResourceType] = {
     normalize_tr("Kaynak"): ResourceType.YAKIT,
     normalize_tr("Kaynak Merkezi"): ResourceType.YAKIT,
@@ -504,9 +312,7 @@ _RESOURCE_TYPE_ES_ANLAMLILAR: Dict[str, ResourceType] = {
 
 
 def _gecersiz_resource_type_ise_es_anlamlisina_cek(item: Dict[str, Any]) -> Dict[str, Any]:
-    """`ResourceHub.resource_type` icin `_gecersiz_unit_type_ise_es_
-    anlamlisina_cek` ile BİREBİR AYNI mantık — bkz. o fonksiyonun
-    docstring'i, burada TEKRARLANMAZ."""
+   
     ham_deger = item.get("resource_type")
     if ham_deger is None or isinstance(ham_deger, ResourceType) or not isinstance(ham_deger, str):
         return item
@@ -534,55 +340,16 @@ def _gecersiz_resource_type_ise_es_anlamlisina_cek(item: Dict[str, Any]) -> Dict
     return duzeltilmis
 
 
-# NOT (TASINDI — Kurucu talebi, Rize senaryosu): `infrastructure_type`
-# icin "Yol"/"Ana Yollar"/"Otoyol" gibi es-anlamlilari `InfrastructureType.
-# KARAYOLU`ya cevirme mantigi ARTIK BURADA DEGIL — `models.Infrastructure.
-# _infrastructure_type_on_donustur` (bir `model_validator(mode="before")`)
-# icinde, Pydantic seviyesinde YASIYOR. Gerekce: "yumusak" (prompt-only)
-# kurallar LLM tarafindan EZILEBILIYORDU (bkz. `nlp_parser`daki kural 16
-# docstring notu); Pydantic seviyesindeki bir on-donusum, bu kodu HANGI
-# ust-katmandan (sadece bu dosyadan degil, ileride eklenebilecek BASKA bir
-# ETL/LLM kaynagindan bile) cagirilirsa cagirilsin AYNI garantiyi verir —
-# aninin TEK bir yerde (modelin KENDISINDE) yasamasi da bakim acisindan
-# daha guvenlidir (iki kopya senkron-disi kalma riski YOKTUR).
 
-# ---------------------------------------------------------------------------
-# ENTITY ROUTING KURTARMA: yanlis yerlestirilmis Cadde/Sokak/Bulvar/Yol VE
-# Kopru/Viyaduk/Tunel/Kavsak kayitlarini Pydantic dogrulamasindan ONCE
-# `facilities`den `infrastructures`e tasima
-# ---------------------------------------------------------------------------
-# SORUN: Yukaridaki "SEHIR ICI (URBAN) CADDE/SOKAK KURALI" ve "EN ONEMLI
-# KURAL (SEHIR ICI)" talimatlarina RAGMEN, LLM bazen bir cadde/sokak/bulvar/
-# yol ADINI (ör. "Vali Fahri Bey Caddesi") YA DA bir kopru/tunel/viyaduk/
-# kavsak ADINI (ör. "Komurhan Koprusu") yanlislikla `facilities` (Tesis)
-# listesine koyabiliyor (ör. "komurhan koprusu yikildi..." metni, model
-# tarafindan Facility sanilirsa TAMAMEN kaybolur). `FacilityType`
-# enum'i (Havalimani/Hastane/Askeri Us/Liman/Siginak) icinde ne "Sokak/
-# Cadde" NE DE "Kopru/Tunel/Viyaduk" DIYE BIR SECENEK OLMADIGINDAN, Pydantic
-# bu kaydi KESIN olarak reddediyor (bkz. `_coerce_node` -> ValidationError)
-# ve kayit TAMAMEN kayboluyor — SADECE prompt talimatina guvenmek YETMEZ
-# (tipki `apply_required_field_fallbacks`daki "modele guvenmek yetmez"
-# mantigiyla AYNI): kodun kendisi bu hatayi Pydantic dogrulamasindan ONCE
-# ham JSON uzerinde YAKALAYIP DUZELTMELIDIR.
-#
-# Ayrica kullanicinin YAZIM HATALARI (ör. "kcprüsü" yerine "köprüsü") tam
-# alt-dize (`in`) eslesmesini atlatabiliyor; bu yuzden asagida `database.py`
-# icindeki `FUZZY_ALTYAPI_ESIK` ile AYNI difflib tabanli BULANIK (fuzzy)
-# kelime eslestirme deseni de kullanilir.
 _YAPI_TIP_KOK_KELIMELERI: Tuple[Tuple[str, str], ...] = (
-    # (infrastructure_type, normalize_tr edilmis kok kelime). SIRA ONEMLI:
-    # daha OZGUL yapilar (kopru/tunel/viyaduk) ONCE kontrol edilir; boylece
-    # ör. "Koprulu Kavsak" gibi bir isim yanlislikla en genel "Sokak"
-    # kategorisine degil, dogru ozgul kategoriye duser.
+    
     ("Kopru", "kopru"),
     ("Kopru", "koprusu"),
     ("Tunel", "tunel"),
     ("Tunel", "tuneli"),
     ("Viyaduk", "viyaduk"),
     ("Viyaduk", "viyaduku"),
-    # NOT: InfrastructureType'ta ayri bir "Kavsak" degeri YOK; bir kavsak da
-    # sehir/karayolu AGININ bir sehir-ici DUGUM NOKTASI oldugundan, sokak/
-    # cadde ile AYNI genel "Sokak" kategorisine yonlendirilir.
+
     ("Sokak", "kavsak"),
     ("Sokak", "kavsagi"),
     ("Sokak", "cadde"),
@@ -592,56 +359,19 @@ _YAPI_TIP_KOK_KELIMELERI: Tuple[Tuple[str, str], ...] = (
 )
 
 _YAPI_FUZZY_ESIK = 0.78
-"""Kok kelime eslestirme icin difflib.SequenceMatcher esigi — klavye/yazim
-hatalarini (ör. "kcprusu" ~ "köprüsü") tolere eder ama alakasiz kelimeleri
-yanlislikla eslestirmeyecek kadar YUKSEKTIR (bkz. `database.py` icindeki
-`FUZZY_ALTYAPI_ESIK = 0.75` ile AYNI mantik, biraz daha siki: buradaki
-eslesme SINIFLANDIRMAYI degistirdigi icin -Sokak/Kopru/Tunel/Viyaduk-
-yanlis-pozitif riskine karsi biraz daha muhafazakar tutulmustur)."""
 
-# Facility.durum/mevcut_durum icin, "kapali/hasarli" sayilan normalize
-# (bkz. `normalize_tr`) degerler — kurtarilan kaydin `acik_mi`sini turetmek
-# icin kullanilir (asagida `reroute_misplaced_street_facilities`).
+
+
 _KAPALI_SAYILAN_DURUMLAR = frozenset({"hasarli", "yok edildi"})
 
-# ---------------------------------------------------------------------------
-# GIRDI ON-DUZELTME (KOK NEDEN DUZELTMESI)
-# ---------------------------------------------------------------------------
-# SORUN: prompt'a bir "yazim hatalarini tolere et" talimati eklemek TEK
-# BASINA YETMEZ. "kömürhan kcprüsü yıkıldı..." metni gonderildiginde
-# llama3, prompttaki acik talimata RAGMEN, kelimeyi hic anlamlandiramayip
-# TAMAMEN BOS bir JSON iskeleti ("facilities": [], "events": [] ...)
-# dondurebilir — ayni metnin SADECE yazim hatasi duzeltilmis hali
-# ("kömürhan köprüsü...") ise sorunsuz calisir. Demek ki kucuk/yerel bir
-# modelin "iyi niyetine" birakmak YETERSIZ; duzeltme DETERMINISTIK olarak,
-# metin LLM'e gitmeden ONCE, kod tarafinda yapilmalidir (tipki
-# `apply_required_field_fallbacks`daki "modele guvenmek yetmez" mantigiyla
-# AYNI, ama bu kez PROMPT'TAN ONCE).
-#
-# `_YAPI_TIP_KOK_KELIMELERI`deki kok kelimeler (kopru/tunel/viyaduk/kavsak/
-# cadde/sokak/bulvar/yol — hem bekci hem cekimli varyantlar) YENIDEN
-# KULLANILIR: bunlar zaten "kritik altyapi terimi" sozlugudur, ayri bir
-# liste bakimi GEREKMEZ.
+
 _KRITIK_TERIM_KOKLERI: Tuple[str, ...] = tuple(sorted({kok for _, kok in _YAPI_TIP_KOK_KELIMELERI}))
 
 _METIN_ON_DUZELTME_FUZZY_ESIK = 0.78
-"""`_YAPI_FUZZY_ESIK` ile AYNI esik/mantik — bkz. o sabitin docstring'i."""
 
 
 def _metindeki_kritik_terimleri_duzelt(text: str) -> str:
-    """LLM'e gonderilmeden ONCE, ham girdi metnindeki KRITIK altyapi
-    terimlerinin (köprü/tünel/viyadük/kavşak/cadde/sokak/bulvar/yol) ağır
-    yazim hatalarini (ör. "kcprüsü" -> "koprusu") DETERMINISTIK olarak
-    duzeltir — bkz. yukaridaki "GIRDI ON-DUZELTME" aciklamasi.
-
-    Metin, kelime/kelime-disi (bosluk/noktalama) parcalara ayrilir; SADECE
-    alfabetik parcalar icin, `_KRITIK_TERIM_KOKLERI` ile TAM eslesmeyen
-    (yani zaten dogru YAZILMAMIS) her kelime icin en yuksek difflib
-    benzerlik oranina sahip kok bulunur; esik (`_METIN_ON_DUZELTME_FUZZY_
-    ESIK`) asilirsa kelime bu kokle DEGISTIRILIR. Boylece SADECE gercekten
-    bu kritik terimlerden birine BENZEYEN yazim hatalari duzeltilir; metnin
-    geri kalani (yer/kisi isimleri, alakasiz kelimeler) DOKUNULMADAN kalir.
-    """
+  
     parcalar = re.findall(r"\w+|\W+", text, flags=re.UNICODE)
     sonuc_parcalari: List[str] = []
     for parca in parcalar:
@@ -650,7 +380,7 @@ def _metindeki_kritik_terimleri_duzelt(text: str) -> str:
             continue
         katlanmis = normalize_tr(parca)
         if katlanmis in _KRITIK_TERIM_KOKLERI:
-            sonuc_parcalari.append(parca)  # zaten dogru, DOKUNMA.
+            sonuc_parcalari.append(parca)  
             continue
         en_iyi_kok: Optional[str] = None
         en_iyi_oran = 0.0
@@ -669,11 +399,7 @@ def _metindeki_kritik_terimleri_duzelt(text: str) -> str:
 
 
 def _isim_yapi_tipini_belirle(isim: Any) -> Optional[str]:
-    """Bir `isim` degerindeki kelimeleri `_YAPI_TIP_KOK_KELIMELERI` icindeki
-    kok kelimelerle karsilastirir: ONCE hizli TAM ALT-DIZE (`in`) kontrolu,
-    bulunamazsa kelime-kelime BULANIK (difflib, yazim hatasi toleransli)
-    kontrolu yapar. Eslesme varsa ilgili `infrastructure_type` degerini
-    ("Sokak"/"Kopru"/"Tunel"/"Viyaduk"), yoksa `None` dondurur."""
+    
     if not isinstance(isim, str) or not isim.strip():
         return None
     katlanmis_tam = normalize_tr(isim)
@@ -691,19 +417,7 @@ def _isim_yapi_tipini_belirle(isim: Any) -> Optional[str]:
 
 
 def reroute_misplaced_street_facilities(raw_json: Dict[str, Any]) -> Dict[str, Any]:
-    """LLM'in yanlislikla `facilities` listesine koydugu cadde/sokak/bulvar/
-    yol/kavsak VE kopru/tunel/viyaduk kayitlarini, Pydantic dogrulamasindan
-    ONCE `infrastructures`e (dogru `infrastructure_type` ile) TASIR — bkz.
-    yukaridaki "SORUN" aciklamasi. `facilities` icinde boyle bir isim
-    YOKSA `raw_json` DEGISTIRILMEDEN (ayni referans) dondurulur.
-
-    Kurtarilan kayit SADECE Infrastructure semasinda ANLAMLI olan alanlari
-    tasir (`facility_type`/`kapasite`/`mevcut_durum` gibi Facility'ye ozgu
-    alanlar ATILIR — Infrastructure modelinde zaten yoklar); eksik kalan
-    REQUIRED alanlar (ör. `uzunluk_km`) asagi akiste ZATEN
-    `apply_required_field_fallbacks` tarafindan doldurulur, burada TEKRAR
-    EDILMEZ.
-    """
+  
     facilities = raw_json.get("facilities")
     if not facilities:
         return raw_json
@@ -753,31 +467,8 @@ def reroute_misplaced_street_facilities(raw_json: Dict[str, Any]) -> Dict[str, A
     return duzeltilmis
 
 
-# ---------------------------------------------------------------------------
-# ENTITY ROUTING KURTARMA (TERS YÖN): yanlış yerleştirilmiş askeri üs/
-# havalimanı/hastane/liman/sığınak kayıtlarını `infrastructures`den
-# `facilities`e (doğru `facility_type` ile) taşıma — `reroute_misplaced_
-# street_facilities`in SİMETRİK/AYNAsı, TERS yöndeki AYNI sınıf hata için.
-# ---------------------------------------------------------------------------
-# Kanitlanmis bir bosluk icin savunma (ör. "Diyarbakır Jet Üssü" raporu):
-# "· 'Diyarbakır Jet Üssü' (Infrastructure) doğrulanamadı ve atlandı: ...
-# infrastructure_type Input should be 'Karayolu', 'Demiryolu', 'Kopru',
-# 'Tunel', 'Viyaduk' or 'Sokak' [input_value='Jet Üssü']" — model bir
-# askeri hava üssünü (ki `FacilityType.
-# ASKERI_US = "Askeri Us"` olarak ZATEN VAR, bkz. `models.py`) yanlışlıkla
-# `infrastructures` listesine, `infrastructure_type` alanına da UYDURMA/
-# geçersiz bir değer ("Jet Üssü") yazarak koydu. `InfrastructureType`
-# enum'i (Karayolu/Demiryolu/Kopru/Tunel/Viyaduk/Sokak) içinde ne "Askeri
-# Üs" NE DE "Havalimanı/Hastane/Liman/Sığınak" DİYE BİR SEÇENEK
-# OLMADIĞINDAN, Pydantic bu kaydı KESİN olarak reddediyor ve kayıt (kritik
-# bir askeri hedef!) TAMAMEN kayboluyor — `reroute_misplaced_street_
-# facilities`deki "SADECE prompt talimatına güvenmek YETMEZ" ilkesiyle
-# BİREBİR AYNI sınıf bir boşluk, kod seviyesinde AYNI şekilde ele alınır.
-# ---------------------------------------------------------------------------
 _TESIS_TIP_KOK_KELIMELERI: Tuple[Tuple[str, str], ...] = (
-    # (facility_type, normalize_tr edilmis kok kelime). SIRA ONEMLI DEGIL —
-    # kok kelimeler birbiriyle CAKISMIYOR (`_YAPI_TIP_KOK_KELIMELERI`deki
-    # "daha ozgul once" kaygisi burada YOK).
+    
     ("Askeri Us", "hava ussu"),
     ("Askeri Us", "jet ussu"),
     ("Askeri Us", "askeri us"),
@@ -799,11 +490,7 @@ _TESIS_TIP_KOK_KELIMELERI: Tuple[Tuple[str, str], ...] = (
 
 
 def _infrastructure_type_gecerli_mi(item: Dict[str, Any]) -> bool:
-    """`item['infrastructure_type']` ZATEN gecerli bir `InfrastructureType`
-    uyesine (TR-karakter/buyuk-kucuk harf farki tolere edilerek) karsilik
-    geliyorsa `True` doner — boyle bir kayda ASLA dokunulmaz (yanlislikla
-    dogru siniflandirilmis bir yol/kopru/tunel kaydini FACILITY'YE tasima
-    riskine karsi)."""
+    
     ham = item.get("infrastructure_type")
     if ham is None:
         return False
@@ -813,10 +500,7 @@ def _infrastructure_type_gecerli_mi(item: Dict[str, Any]) -> bool:
 
 
 def _isim_veya_tip_tesis_tipini_belirle(item: Dict[str, Any]) -> Optional[str]:
-    """`item['isim']` VE (gecersiz) `item['infrastructure_type']` metnini
-    BIRLIKTE `_TESIS_TIP_KOK_KELIMELERI` ile karsilastirir — bkz. yukarisi:
-    kok kelime ("Jet Üssü") HEM isimde HEM de gecersiz
-    infrastructure_type degerinde gecebildiginden, ikisi de taranir."""
+   
     parcalar = [p for p in (item.get("isim"), item.get("infrastructure_type")) if isinstance(p, str)]
     if not parcalar:
         return None
@@ -828,25 +512,7 @@ def _isim_veya_tip_tesis_tipini_belirle(item: Dict[str, Any]) -> Optional[str]:
 
 
 def reroute_misplaced_infrastructure_facilities(raw_json: Dict[str, Any]) -> Dict[str, Any]:
-    """LLM'in yanlışlıkla `infrastructures` listesine koyduğu askeri üs/
-    havalimanı/hastane/liman/sığınak kayıtlarını, Pydantic doğrulamasından
-    ÖNCE `facilities`e (doğru `facility_type` ile) TAŞIR — bkz. modül-üstü
-    açıklama. `infrastructures` içinde böyle bir kayıt YOKSA
-    `raw_json` DEĞİŞTİRİLMEDEN (aynı referans) döndürülür.
-
-    GÜVENCE (yanlış-pozitif riskine karşı): SADECE (a) mevcut
-    `infrastructure_type` GERÇEKTEN geçersizse (bkz. `_infrastructure_type_
-    gecerli_mi` — zaten geçerli bir yol/köprü/tünel kaydına ASLA dokunulmaz)
-    VE (b) isim, `_isim_yapi_tipini_belirle` ile GERÇEK bir yol/köprü/tünel/
-    sokak kök kelimesine EŞLEŞMİYORSA (ör. "Liman Caddesi" gibi bir isim,
-    "liman" kök kelimesine rağmen burada YANLIŞLIKLA taşınmaz — "cadde" kök
-    kelimesi zaten onu bir SOKAK olarak doğru tanımlar) kayıt taşınır.
-
-    Kurtarılan kayıt SADECE `Facility` şemasında ANLAMLI olan alanları
-    taşır (`uzunluk_km`/`acik_mi`/`tonaj_kapasitesi`/`bitis_enlem`/
-    `bitis_boylam` gibi Infrastructure'a özgü alanlar ATILIR). Eksik kalan
-    REQUIRED `kapasite` alanı aşağı akışta ZATEN `apply_required_field_
-    fallbacks` tarafından (0.0 ile) doldurulur, burada TEKRAR EDİLMEZ."""
+   
     infrastructures = raw_json.get("infrastructures")
     if not infrastructures:
         return raw_json
@@ -858,11 +524,11 @@ def reroute_misplaced_infrastructure_facilities(raw_json: Dict[str, Any]) -> Dic
             kalan_infrastructures.append(item)
             continue
         if _isim_yapi_tipini_belirle(item.get("isim")) is not None:
-            kalan_infrastructures.append(item)  # gercekten bir yol/kopru/tunel/sokak - dokunma.
+            kalan_infrastructures.append(item) 
             continue
         tesis_tipi = _isim_veya_tip_tesis_tipini_belirle(item)
         if tesis_tipi is None:
-            kalan_infrastructures.append(item)  # ne yol/kopru/tunel NE DE bilinen bir tesis turu - oldugu gibi birak.
+            kalan_infrastructures.append(item) 
             continue
 
         isim = item.get("isim")
@@ -893,28 +559,9 @@ def reroute_misplaced_infrastructure_facilities(raw_json: Dict[str, Any]) -> Dic
     return duzeltilmis
 
 
-# ---------------------------------------------------------------------------
-# ENTITY ROUTING KURTARMA (İKİNCİ DALGA): yanlış yerleştirilmiş yakıt/depo
-# kayıtlarını `energy_infrastructures`den `resource_hubs`e taşıma
-# ---------------------------------------------------------------------------
-# Kanitlanmis bir bosluk icin savunma (ör. "Ankara Kızılay Doğalgaz
-# Deposu" senaryosu): LLM, bir yakıt/gaz DEPOSUNU (ki bu GERÇEKTEN bir
-# `ResourceHub` — Yakıt türü —
-# konusudur) yanlışlıkla `energy_infrastructures` listesine,
-# `energy_type='Doğalgaz'` gibi bir değerle koydu. Bu, `reroute_misplaced_
-# infrastructure_facilities`deki Infrastructure/Facility çakışmasından
-# FARKLI bir alt-sınıf: "Doğalgaz" bir `EnergyInfrastructureType` ES-
-# ANLAMLISI DEĞİLDİR (Baraj/Trafo/Santral'ın HİÇBİRİNE anlamca karşılık
-# gelmez — bir gaz deposu üretim/iletim altyapısı değil, bir KAYNAK
-# DEPOLAMA tesisidir) — bu yüzden `_gecersiz_*_ise_es_anlamlisina_cek`
-# (AYNI kategori içi düzeltme) YETERSİZDİR; kayıt TAMAMEN FARKLI bir
-# kategoriye (ResourceHub) TAŞINMALIDIR — TAM DA `reroute_misplaced_
-# infrastructure_facilities`in çözdüğü sorun SINIFI, farklı kategori
-# çiftinde.
+
 def _energy_type_gecerli_mi(item: Dict[str, Any]) -> bool:
-    """`item['energy_type']` ZATEN gecerli bir `EnergyInfrastructureType`
-    uyesine (TR-karakter/buyuk-kucuk harf farki tolere edilerek) karsilik
-    geliyorsa `True` doner — boyle bir kayda ASLA dokunulmaz."""
+   
     ham = item.get("energy_type")
     if ham is None:
         return False
@@ -924,20 +571,7 @@ def _energy_type_gecerli_mi(item: Dict[str, Any]) -> bool:
 
 
 def reroute_misplaced_energy_resources(raw_json: Dict[str, Any]) -> Dict[str, Any]:
-    """LLM'in yanlışlıkla `energy_infrastructures` listesine koyduğu
-    yakıt/gaz depo kayıtlarını, Pydantic doğrulamasından ÖNCE
-    `resource_hubs`e (`resource_type=Yakit` ile) TAŞIR — bkz. modül-üstü
-    açıklama. `energy_infrastructures` içinde böyle bir
-    kayıt YOKSA `raw_json` DEĞİŞTİRİLMEDEN döndürülür.
-
-    GÜVENCE: SADECE (a) mevcut `energy_type` GERÇEKTEN geçersizse (bkz.
-    `_energy_type_gecerli_mi` — zaten geçerli bir Baraj/Trafo/Santral
-    kaydına ASLA dokunulmaz) VE (b) isim/energy_type, `_RESOURCE_TYPE_ES_
-    ANLAMLILAR`daki bir yakıt kök kelimesiyle (ör. "doğalgaz", "akaryakıt")
-    eşleşiyorsa kayıt taşınır — GERÇEKTEN bilinmeyen bir enerji türü ise
-    (ne geçerli ne yakıt-ilişkili) dokunulmadan bırakılır, Pydantic'in
-    doğal reddi geçerli kalır (bu durumda mevcut hata mesajı zaten
-    tanılayıcıdır, yanlış bir kategoriye zorlamaktan iyidir)."""
+   
     enerjiler = raw_json.get("energy_infrastructures")
     if not enerjiler:
         return raw_json
@@ -952,7 +586,7 @@ def reroute_misplaced_energy_resources(raw_json: Dict[str, Any]) -> Dict[str, An
         birlesik = normalize_tr(" ".join(parcalar)) if parcalar else ""
         yakit_mi = any(kok in birlesik for kok in _RESOURCE_TYPE_ES_ANLAMLILAR)
         if not yakit_mi:
-            kalan_enerjiler.append(item)  # ne gecerli ne yakit-iliskili - oldugu gibi birak.
+            kalan_enerjiler.append(item) 
             continue
 
         isim = item.get("isim")
@@ -982,45 +616,17 @@ def reroute_misplaced_energy_resources(raw_json: Dict[str, Any]) -> Dict[str, An
     return duzeltilmis
 
 
-# ---------------------------------------------------------------------------
-# "KIRMIZI EKRAN YASAĞI" — SON ÇARE YEDEK AYRIŞTIRMA
-# ("Girdi Garantisi"/Input Parsing Guarantee)
-# ---------------------------------------------------------------------------
-# Kanıtlanmış bir bosluk icin savunma (bkz. `extract_entities` çağrı yeri):
-# "sivrice'de şiddetli deprem oldu binalar çöktü" gibi GAYRİ RESMİ/küçük
-# harfli bir metin, `temperature=0.0` OLMASINA RAĞMEN, aynı prompt/şema
-# ile birden fazla denemenin bir kısmında (temp=0 bile llama3'te TAM
-# deterministik DEĞİLDİR — GPU/quantized model kaynaklı örnekleme
-# varyansı) modelin TAMAMEN BOŞ bir JSON şablonu ("facilities": [], ...,
-# "events": []) döndürmesine yol açabilir — modele "KISA/EKSIK METİN
-# KURALI" ile "ASLA boş liste dönme" KESİN OLARAK söylenmiş olsa BİLE. Bu,
-# projenin tekrar tekrar kanıtladığı "prompt kuralına güvenmek YETMEZ"
-# ilkesiyle AYNI sınıf bir sorun — bu yüzden AYNI çözüm uygulanır: modelin
-# çıktısı TAMAMEN BOŞSA (hiçbir varlık tipinde tek
-# bir kayıt bile YOKSA), basit/kaba bir anahtar-kelime taraması ile TEK bir
-# minimal ama ŞEMA-GEÇERLİ `Event` kaydı ÜRETİLİR — "kırmızı ekran" (hiçbir
-# şey işlenmedi hatası) yerine EN AZINDAN krizin TÜRÜ ve KONUMU sisteme
-# girer; koordinat çözümü zaten `src.ui.app._grafa_yaz`daki mevcut 3
-# kademeli zincire (Coğrafi Bağlama -> Harici Geokodlama -> reddetme)
-# BIRAKILIR — bu fonksiyon KESİN bir koordinat İDDİA ETMEZ, sadece
-# doğru ismi/türü üretip o zincirin işini yapmasına İZİN VERİR.
 
 _KABA_OLAY_TURU_ANAHTAR_KELIMELERI: List[Tuple[str, "EventType"]] = [
-    # SIRALAMA ÖNEMLİDİR: daha SPESİFİK/çok-kelimeli ifadeler ÖNCE
-    # kontrol edilir (ör. "orman yangini", tek başına "yangin"dan ÖNCE —
-    # aksi halde "orman yangını" metni asla kendi kategorisine ULAŞAMAZ).
+  
     ("orman yangini", EventType.ORMAN_YANGINI),
     ("siber sald", EventType.SIBER_SALDIRI),
     ("bombali sald", EventType.TEROR),
     ("teror", EventType.TEROR),
     ("heyelan", EventType.HEYELAN),
     ("toprak kaymasi", EventType.HEYELAN),
-    (" cig ", EventType.CIG),  # normalize_tr "çığ" -> "cig"; yanlis eslesmeyi (ör. "cigin" gibi baska kelimeler) azaltmak icin bosluklu
+    (" cig ", EventType.CIG),  
     ("tahliye", EventType.TAHLIYE),
-    # "volkan"/"baraj" gibi COK-KELIMELI/ceviklerin, kendilerini ICEREN daha GENEL
-    # bir anahtar kelimeden ("patlama"/"sel") ONCE kontrol edilmesi
-    # GEREKIR (ör. "volkanik patlama" metni "patlama" anahtarina
-    # TAKILMADAN once "volkan"a eslesmelidir).
     ("volkan", EventType.VOLKANIK_PATLAMA),
     ("baraj", EventType.BARAJ_COKMESI),
     ("tsunami", EventType.TSUNAMI),
@@ -1123,17 +729,7 @@ def _metinden_kaba_event_type_tahmin_et(text: str) -> Optional["EventType"]:
 
 
 def _metinden_yer_adi_adayi_cikar(text: str) -> Optional[str]:
-    """`text` içinden olası bir yer-adı adayı çıkarır — İKİ aşamalı:
-    (1) Metinde BÜYÜK harfle başlayan ilk anlamlı kelime (iyi biçimlendirilmiş
-    metinlerde en güvenilir sinyal — ör. "Sivrice'de deprem oldu" -> "Sivrice").
-    (2) Hiç yoksa (metin TAMAMEN küçük harfliyse — bkz. canlı hata raporu:
-    "sivrice'de şiddetli deprem oldu"), metnin İLK kelimesi alınır ve
-    Türkçe'nin kesme işaretli hal eklerinden (ör. "sivrice'de" -> "sivrice")
-    ARINDIRILIR; bu, sahadan gelen gayri resmi raporların YAYGIN bir kalıbı
-    olan "<yer adı>'de/'da ... oldu" yapısına dayanır.
-    Her iki aşamada da `_YER_ADI_ADAY_DURAK_KELIMELERI`deki genel kelimeler
-    VE 3 karakterden kısa adaylar ELENİR (yanlış eşleşme riski). Hiçbir
-    makul aday bulunamazsa `None` döner."""
+
     for aday in re.findall(r"\b[A-ZÇĞİÖŞÜ][a-zçğıöşüA-ZÇĞİÖŞÜ]*\b", text):
         if len(aday) >= 3 and normalize_tr(aday) not in _YER_ADI_ADAY_DURAK_KELIMELERI:
             return aday
@@ -1146,39 +742,11 @@ def _metinden_yer_adi_adayi_cikar(text: str) -> Optional[str]:
     return None
 
 
-# Yer tutucu için "KOORDINAT KALIBRASYONU"na uygun görünen bir Elazığ-
-# merkezi değer (38.68, 39.22) KASITLI OLARAK KULLANILMAZ — bu,
-# `Neo4jConnection.koordinat_gercekci_mi`nin GENİŞ zarfının (tüm yüklü
-# Elazığ/Malatya bölgesini kapsar) İÇİNE denk geldiği için `src.ui.app.
-# _grafa_yaz`daki "Coğrafi Bağlama -> Harici Geokodlama" KURTARMA
-# ZİNCİRİNİ HİÇ TETİKLEMEZ — olay "Sivrice Depremi" olsa bile GERÇEK
-# Sivrice konumuna DEĞİL, jenerik Elazığ şehir merkezine sabitlenmiş
-# olurdu. Çözüm: yer tutucu BİLİNÇLİ olarak Türkiye'nin ÇOK dışına
-# (Gine Körfezi, 0.0/0.0) taşındı — bu, `koordinat_gercekci_mi`nin HER
-# ZAMAN implausible bulmasını GARANTİ eder, böylece `_grafa_yaz`daki
-# mevcut 3 kademeli zincir (Event.isim'deki GERÇEK yer adına göre ya
-# YEREL veriye ya harici geokodlamaya) HER ZAMAN çalışır — bu yer tutucu
-# ASLA nihai/güvenilir bir konum olarak KABUL EDİLMEZ, SADECE Pydantic'in
-# ZORUNLU `enlem`/`boylam` alanlarını GEÇİCİ doldurmak İÇİNDİR.
 _YEDEK_OLAY_VARSAYILAN_KOORDINAT: Tuple[float, float] = (0.0, 0.0)
 
 
 def _yedek_kriz_olayi_uret(text: str) -> Optional[Event]:
-    """"KIRMIZI EKRAN YASAĞI": `extract_entities`, LLM'den
-    HİÇBİR varlık (facilities/infrastructures/.../events HEPSİ boş) elde
-    edemediğinde SON ÇARE olarak çağrılır. `text`te tanıdık bir kriz-türü
-    anahtar kelimesi VARSA (bkz. `_metinden_kaba_event_type_tahmin_et`),
-    minimal ama ŞEMA-GEÇERLİ tek bir `Event` üretir (isim = "<yer adı>
-    <tür soneki>", ör. "Sivrice Depremi"); YOKSA (metin muhtemelen bir
-    kriz raporu bile DEĞİLSE) `None` döner — bu fonksiyon ASLA rastgele
-    bir metinden zorla bir "kriz" UYDURMAZ, sadece GERÇEKTEN tanıdık bir
-    afet/kriz ifadesi geçtiğinde devreye girer.
 
-    Koordinat SADECE bir YER TUTUCUDUR (bkz. `_YEDEK_OLAY_VARSAYILAN_
-    KOORDINAT`) — nihai/gerçek konum çözümü `src.ui.app._grafa_yaz`daki
-    mevcut zincire BIRAKILIR (bu fonksiyon o zincire GİRDİ sağlar, onun
-    YERİNE geçmez).
-    """
     olay_turu = _metinden_kaba_event_type_tahmin_et(text)
     if olay_turu is None:
         return None
@@ -1197,32 +765,11 @@ def _yedek_kriz_olayi_uret(text: str) -> Optional[Event]:
             etki_alani_km=5.0,
             siddet=EventSeverity.YUKSEK,
         )
-    except ValidationError as exc:  # pragma: no cover - tum alanlar sabit/gecerli oldugundan beklenmez.
+    except ValidationError as exc: 
         logger.error("Yedek kriz olayi (fallback) OLUSTURULAMADI: %s", exc)
         return None
 
 
-# ---------------------------------------------------------------------------
-# Few-shot ornek: JSON anahtarlarinin (alan adlarinin) TURKCE ve semadaki
-# gibi BIREBIR kalmasini modele zorlamak icin kullanilan doldurulmus ornek.
-# ---------------------------------------------------------------------------
-# Kucuk/yerel modeller (ör. llama3), aciklamayi dogru anlasa bile JSON
-# anahtarlarini kendiliginden Ingilizce'ye cevirebiliyor (name, latitude,
-# capacity...). Somut, tum varlik tiplerini ve iliski turlerini kapsayan
-# doldurulmus bir ornek gostermek, bu "anahtar surukleme" sorununu buyuk
-# olcude azaltir. Ornek, gercek test metninden FARKLI bir senaryo kullanir
-# (model ezberlemesin, genellesin diye).
-
-# KOORDINAT KOPYALAMA RISKINE KARSI KORUMA: bu ornek eskiden Van/Igdir
-# (boylam ~43-44) uzerine kuruluydu — "KOORDINAT KALIBRASYONU" kurali
-# modele Elazig/Malatya (enlem 38-39, boylam 39-40) araligini kullanmasini
-# soylerken, TEK somut sayisal ornegi BUNUN TAMAMEN DISINDA bir bolgeyi
-# gosteriyordu. Bu durumda model, "Sivrice" gibi kendi bilmedigi bir yer
-# adi icin gercekten Elazig araliginda akil yurutmek yerine, bu ornekteki
-# sayilari NEREDEYSE BIREBIR KOPYALAYABILIR (ör. "38.5, 43.4") — soyut
-# kural ile somut ornek CELISINCE model somut ornegi kazanir. Cozum:
-# ornegin KENDISI de Elazig bolgesine tasindi, boylece soyut kural ile
-# somut ornek ARTIK AYNI seyi soyluyor.
 _FEW_SHOT_ORNEK_METIN = (
     "3 Mart 2024 sabahi saat 09:00 civarinda, Elazig'da sel felaketi yasandi. "
     "Elazig Havalimani sel nedeniyle kismen kullanilabilir durumda. Elazig-"
@@ -1233,11 +780,6 @@ _FEW_SHOT_ORNEK_METIN = (
     "Gazi Caddesi ve Lise Sokak kesisiminde bir patlama meydana geldi; bu iki "
     "cadde/sokak da trafige kapandi."
 )
-# Not: Bu ornek metin BILEREK acik bir tarih icerir ("3 Mart 2024, saat
-# 09:00"); asagidaki cikti da bu tarihi birebir yansitir. Boylece model,
-# "metinde tarih varsa onu kullan" davranisini somut olarak gorur. Gercek
-# ANALIZ EDILECEK METIN'de tarih GECMEYEBILIR; o durumda devreye giren kural
-# asagidaki "# ZAMAN KURALI" bolumunde ayrica tanimlanmistir.
 
 _FEW_SHOT_ORNEK_CIKTI: Dict[str, Any] = {
     "facilities": [
@@ -1266,13 +808,7 @@ _FEW_SHOT_ORNEK_CIKTI: Dict[str, Any] = {
             "bitis_enlem": 38.85,
             "bitis_boylam": 39.55,
         },
-        # SEHIR ICI (URBAN) ORNEK: "Gazi Caddesi ve Lise Sokak kesisiminde"
-        # ifadesi, TEK bir birlesik "kesisim" kaydi DEGIL, HER cadde/sokak
-        # icin AYRI bir kayit olarak cikarilir (bkz. "SEHIR ICI (URBAN)
-        # CADDE/SOKAK KURALI"); infrastructure_type KESINLIKLE "Sokak"dir
-        # (sehirlerarasi "Karayolu" ile KARISTIRILMAZ). Metinde uzunluk/tonaj
-        # gibi sayisal detaylar GECMEDIGI icin bu alanlar `null` birakilir
-        # (bkz. "KISA/EKSIK METIN KURALI") — sistem bunlari otomatik tamamlar.
+      
         {
             "isim": "Gazi Caddesi",
             "enlem": 38.677,
@@ -1354,8 +890,7 @@ _FEW_SHOT_ORNEK_CIKTI: Dict[str, Any] = {
             "zaman_damgasi": "2024-03-03T09:00:00+03:00",
         },
         {
-            # "Savas" DEGIL "Patlama": kasit/dusman unsuru acikca belirtilmedigi
-            # icin (bkz. "OLAY TURU (EVENT_TYPE) SINIFLANDIRMA KURALI").
+
             "isim": "Sehir Merkezi Patlamasi",
             "enlem": 38.6772,
             "boylam": 39.2202,
@@ -1379,28 +914,12 @@ _FEW_SHOT_ORNEK_CIKTI: Dict[str, Any] = {
 
 
 def _build_few_shot_json_block(ornek_cikti: Dict[str, Any] = _FEW_SHOT_ORNEK_CIKTI) -> str:
-    """Bir few-shot ornek ciktiyi JSON metnine cevirir ve PromptTemplate
-    (str.format tabanli) icinde kacis (escape) icin tum suslu parantezleri
-    ikiler; boylece LangChain'in `.format(text=...)` cagrisi bu JSON'u
-    bozmadan geciren tek bir kacis katmani olusur (asagidaki CIKTI FORMATI
-    blogundaki mantikla aynidir). `ornek_cikti` verilmezse ANA (Elazig)
-    few-shot ciktisi kullanilir; ikinci (Rize/Heyelan) ornek icin acikca
-    `_FEW_SHOT_ORNEK_CIKTI_2` verilir (bkz. asagidaki tanim)."""
+   
     ornek_json = json.dumps(ornek_cikti, ensure_ascii=False, indent=2)
     return ornek_json.replace("{", "{{").replace("}", "}}")
 
 
-# "IKINCI FEW-SHOT ORNEGI" (Rize senaryosu — LLM'in varlik cikariminda
-# listeleri BOS donmesini engelleme amaclidir): YUKARIDAKI (Elazig/Sel)
-# ornek TEK BASINA yeterli degildir — model, DAHA ONCE hic gormedigi bir
-# afet turu + il kombinasyonuyla (Rize/Heyelan) karsilastiginda ARA SIRA
-# TUM listeleri bos birakabilir (bkz. `extract_
-# entities`'teki "KIRMIZI EKRAN YASAGI" SON CARE blogu). Tek bir ornek
-# yerine IKI FARKLI afet turu/bolge gormek (few-shot COGULLUGU), modelin
-# "bu SADECE Elazig/Sel'e ozgu bir kalip" seklinde YANLIS bir genelleme
-# yapmasini ONLER — BILEREK KISA/MINIMAL tutulmustur (SADECE Event +
-# Infrastructure; Elazig ornegindeki gibi TUM 6 varlik tipini kapsayan
-# kapsamli bir tekrar GEREKMEZ, o rolu zaten ILK ornek ustleniyor).
+
 _FEW_SHOT_ORNEK_METIN_2 = (
     "20 Ocak 2025 sabahi, Rize'nin Ikizdere ilcesinde saganak yagislar "
     "sonucu heyelan meydana geldi. Bolgedeki ana yollar heyelan nedeniyle "
@@ -1410,12 +929,7 @@ _FEW_SHOT_ORNEK_METIN_2 = (
 _FEW_SHOT_ORNEK_CIKTI_2: Dict[str, Any] = {
     "facilities": [],
     "infrastructures": [
-        # "Ana yollar" -> infrastructure_type KESINLIKLE "Karayolu"dur
-        # ("Yol"/"Ana Yol" DEGIL — bkz. `models.Infrastructure._
-        # infrastructure_type_on_donustur`, bu ARTIK Pydantic seviyesinde
-        # de garanti altindadir, ama few-shot ornekte DOGRUDAN dogru
-        # degeri gostermek modelin BASTAN dogru degeri uretme ihtimalini
-        # artirir).
+        
         {
             "isim": "Ikizdere Ana Yolu",
             "enlem": 40.78,
@@ -1434,12 +948,7 @@ _FEW_SHOT_ORNEK_CIKTI_2: Dict[str, Any] = {
     "resource_hubs": [],
     "units": [],
     "events": [
-        # "Heyelan" -> KESINLIKLE `events` listesine gider, `facilities`e
-        # DEGIL (bkz. kural 16 "AFET/KRIZ TURU ASLA TESIS/ALTYAPI
-        # DEGILDIR" — bu ARTIK Pydantic seviyesinde de garanti altindadir,
-        # bkz. `models.GecersizFacilityTuruAtlandi`, ama few-shot ornekte
-        # DOGRUDAN dogru yerlesimi gostermek modelin BASTAN dogru
-        # yerlestirme ihtimalini artirir).
+     
         {
             "isim": "Ikizdere Heyelani",
             "enlem": 40.78,
@@ -1456,22 +965,7 @@ _FEW_SHOT_ORNEK_CIKTI_2: Dict[str, Any] = {
     ],
 }
 
-# "UCUNCU FEW-SHOT ORNEGI" (Camlihemsin/heyelan/ana yol senaryosu). ONEMLI
-# TASARIM KURALI: bir few-shot ornegi, GERCEK semayla UYUMSUZ alan adlari
-# (ör. "tip" yerine gercek alan adi olan `event_type`/`infrastructure_type`,
-# ya da Infrastructure'da KAPALI/ACIK durumunu bir STRING olarak "Kapali"
-# gostermek — dogrusu `acik_mi` adinda bir BOOLEAN alandir; `durum` alani
-# OperationalStatus'tur ve "Kapali" diye bir uyesi YOKTUR) ya da eksik
-# REQUIRED alanlar (enlem/boylam/zaman_damgasi vb.) icermemelidir. Bu,
-# kural 7 ("JSON anahtarlari KESINLIKLE Turkce adlarla BIREBIR AYNI olmali,
-# Ingilizce'ye/BASKA bir semaya CEVIRME") ile DOGRUDAN CELISIR — semayla
-# CELISEN bir ornegi OLDUGU GIBI eklemek, "somut ornek soyut kurali
-# YENER" riskini TERSINE CEVIRIP modelin YANLIS alan adlarini (`tip`,
-# string "Kapali") ogrenmesine yol acar — bu TAM DA onlenmeye calisilan
-# sorunu KOTULESTIRIR. Bu yuzden asagidaki ornek, senaryoyu
-# (Camlihemsin/heyelan/ana yol) BIREBIR korur ama alan adlarini/
-# degerlerini GERCEK semaya (diger iki few-shot ornegiyle AYNI formata)
-# uyarlar.
+
 _FEW_SHOT_ORNEK_METIN_3 = (
     "10 Kasim 2025 sabahi, Rize'nin Camlihemsin merkezinde asiri saganak "
     "yagisa bagli devasa bir heyelan meydana geldi. Ana yollar camur ve "
@@ -1516,12 +1010,6 @@ _FEW_SHOT_ORNEK_CIKTI_3: Dict[str, Any] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Cikarim (extraction) prompt sablonu
-# ---------------------------------------------------------------------------
-# Not: Cift suslu parantezler ({{ }}), PromptTemplate'in {text} degiskenini
-# yorumlarken JSON ornegindeki suslu parantezlerle karismasin diye kacis
-# (escape) amaciyla kullanilir.
 
 EXTRACTION_PROMPT_TEMPLATE = """Sen, Turkiye'nin TAMAMINDAKI (81 il) stratejik noktalara, karayolu/sokak
 agina ve altyapisina hakim, kusursuz calisan bir C4ISR Karar Destek
@@ -1996,36 +1484,11 @@ JSON DISINDA HICBIR ACIKLAMA, GIRIS VEYA NOT YAZMA. '```json' GIBI
 MARKDOWN ISARETLERI KULLANMA.
 
 JSON:"""
-# Kanitlanmis bir bosluk icin savunma ("LLM metinden hicbir varlik
-# cikaramadi, SON CARE..." fallback'ine dusulmesi): kural 15
-# ("CIKTI SAFLIGI KURALI") zaten JSON-only bir cikti istiyordu, ama bu
-# kural PROMPT'UN ORTASINDA (numarali kurallar listesinde) gomuluydu —
-# model, ARADA KALAN uzun few-shot ornek + "ANALIZ EDILECEK METIN" bloğunu
-# okuduktan SONRA, bu erken kuralı "unutup" markdown/aciklama sizdirmaya
-# YATKINLASABILIYORDU (bu, `decision_engine.py`deki "DIL KILIDI" sorunuyla
-# AYNI SINIF bir "modele guvenmek yetmez" dersidir — bkz. o dosyadaki
-# `_format_temizle`). Cozum: AYNI KURAL, promptun EN SONUNA (metnin
-# KENDISINDEN SONRA, model uretime baslamadan HEMEN ONCE okunacak SON
-# metin olarak), BUYUK HARFLERLE TEKRARLANIR — bu, `format="json"`
-# (Ollama'nin KENDI JSON-mode zorlamasi, bkz. `__init__`) ile AYNI
-# ONLEMIN promptun ICINDEKI, "yakinlik etkisinden" (recency effect)
-# faydalanan IKINCI/tamamlayici katmanidir.
+
 
 
 class OllamaParser:
-    """Yerel Ollama modeli uzerinden serbest metinden varlik/iliski cikaran ayristirici.
-
-    Kullanim:
-        parser = OllamaParser(model="llama3")
-        sonuc = parser.extract_entities(
-            "Elazig merkezde deprem oldu, devlet hastanesi hasar gordu "
-            "ve iletisim koptu."
-        )
-        sonuc["events"]          # List[Event]
-        sonuc["facilities"]      # List[Facility]
-        sonuc["relationships"]   # List[Relationship]
-    """
-
+   
     def __init__(
         self,
         model: str = "llama3",
@@ -2038,23 +1501,13 @@ class OllamaParser:
         self._model_name: str = model
         self._temperature: float = temperature
 
-        # ChatOllama, LangChain uzerinden yerel Ollama REST API'sine (varsayilan
-        # http://localhost:11434) baglanan sohbet-modeli sarmalayicisidir.
-        # format="json" -> Ollama'nin JSON-mode'unu aktif eder; boylece model
-        # yanitini serbest metin/markdown ile sarmalamak yerine dogrudan
-        # gecerli bir JSON nesnesi olarak dondurmeye zorlanir.
+        
         self.llm = ChatOllama(
             model=self._model_name,
             base_url=self._base_url,
             temperature=self._temperature,
             format="json",
-            # DONANIM OPTİMİZASYONU (bkz. modül-üstü sabitler ve
-            # `decision_engine.py`deki AYNI başlıklı not): TÜM katmanları
-            # CUDA'ya zorlar + CPU-taraflı işi gerçek çekirdek sayısına
-            # göre paralelleştirir; AYRICA bu modül ile `DecisionEngine`
-            # AYNI Ollama modelini FARKLI `options` ile çağırıp modelin
-            # sürekli yeniden yüklenmesine (thrashing) yol açmasın diye
-            # BİLİNÇLİ olarak AYNI değerler kullanılır.
+            
             num_gpu=_OLLAMA_NUM_GPU,
             num_thread=_OLLAMA_NUM_THREAD,
             timeout=_OLLAMA_ISTEK_ZAMAN_ASIMI_SANIYE,
@@ -2066,90 +1519,35 @@ class OllamaParser:
             template=EXTRACTION_PROMPT_TEMPLATE,
         )
 
-        # LCEL zinciri: prompt -> llm -> duz metin cikti.
+       
         self._chain = self.prompt_template | self.llm | StrOutputParser()
 
-    # ------------------------------------------------------------------ #
-    # Genel kullanim (public API)
-    # ------------------------------------------------------------------ #
-
+    
     def extract_entities(self, text: str) -> Dict[str, Any]:
-        """Verilen kriz metnini analiz eder; tespit edilen varliklari ve
-        iliskileri ilgili Pydantic modellerine donusturulmus olarak dondurur.
-
-        Donen sozlugun yapisi:
-            {
-                "facilities": List[Facility],
-                "infrastructures": List[Infrastructure],
-                "energy_infrastructures": List[EnergyInfrastructure],
-                "communication_networks": List[CommunicationNetwork],
-                "resource_hubs": List[ResourceHub],
-                "units": List[Unit],
-                "events": List[Event],
-                "relationships": List[Relationship],
-                "raw_response": str,   # LLM'in ham metin cevabi (debug icin)
-                "validation_hatalari": List[str],  # atlanan kayitlarin insan-okur nedeni
-            }
-
-        Modelin urettigi bir kayit ilgili Pydantic sinifina gore dogrulanamazsa
-        (ValidationError) o kayit atlanir; TEK bir hatali alan tum cikarimi
-        basarisiz KILMAZ (diger gecerli kayitlar yine islenir). AMA atlanan
-        her kayit hem loglanir HEM DE `validation_hatalari` listesine insan-
-        okur bir mesaj olarak eklenir — eskiden SADECE loglanip kullaniciya
-        HICBIR SEKILDE gosterilmiyordu; bu da "rapor gonderdim, hicbir sey
-        olmadi" seklinde SESSIZ bir basarisizlik izlenimi yaratiyordu (bkz.
-        `src.ui.app._rapor_metnini_isle_ve_yenile` — bu listeyi `st.warning`
-        ile ekrana basar).
-
-        Raises:
-            ValueError: `text` bos ise veya LLM cevabindan JSON ayiklanamazsa.
-            RuntimeError: Ollama servisine erisilemezse.
-        """
+      
         if not text or not text.strip():
             raise ValueError("extract_entities: bos metin verilemez.")
 
-        # GIRDI ON-DUZELTME (bkz. `_metindeki_kritik_terimleri_duzelt`
-        # docstring'i — canli "kcprusu" hata raporuyla KANITLANMIS kok neden
-        # duzeltmesi): LLM'e GONDERILMEDEN ONCE, kopru/tunel/viyaduk/kavsak/
-        # cadde/sokak/bulvar/yol gibi kritik terimlerdeki agir yazim
-        # hatalari DETERMINISTIK olarak duzeltilir; prompt'taki "YAZIM
-        # HATASI TOLERANSI KURALI" talimatina GUVENMEK TEK BASINA YETMEZ.
+       
         duzeltilmis_text = _metindeki_kritik_terimleri_duzelt(text)
         if duzeltilmis_text != text:
             logger.info("Girdi metni on-duzeltmeden GECTI: %r -> %r", text, duzeltilmis_text)
 
-        # `current_time`, HER cagrida YENIDEN hesaplanir (parser init aninda
-        # DEGIL) ki uzun sureli calisan bir surecte bile modele hep GUNCEL
-        # zaman gitsin.
+        
         raw_response = self._invoke_llm(duzeltilmis_text, current_time=_current_time_iso())
 
-        # Pydantic dogrulamasindan ONCE modelin HAM cevabi loglanir — model
-        # markdown ekliyorsa, aciklama metni katiyorsa, alanlari Ingilizce'ye
-        # ceviriyorsa ya da JSON'u baska turlu bozuyorsa bu teshis icin gereklidir.
         logger.debug("RAW LLM OUTPUT: %s", raw_response)
 
         raw_json = self._parse_json(raw_response)
 
-        # Ayni teshis amaciyla, AGRESIF TEMIZLIK+json.loads SONRASI (bkz.
-        # `_parse_json`) elde edilen SOZLUGU de loglariz: ham metinle
-        # ayristirilmis sozluk arasindaki fark, sanitizer'in TAM OLARAK NEYI
-        # temizledigini gosterir.
+ 
         logger.debug("PARSED JSON (sanitize + json.loads sonrasi): %s", raw_json)
 
-        # Pydantic dogrulamasindan ONCE calisan "Entity Routing" zirhi (bkz.
-        # `reroute_misplaced_street_facilities` docstring'i): LLM'in yanlis
-        # yerlestirdigi cadde/sokak/bulvar/yol kayitlarini `facilities`den
-        # `infrastructures`e tasir ki asagidaki dogrulama dongusu bunlari
-        # ARTIK reddetmesin.
+
         raw_json = reroute_misplaced_street_facilities(raw_json)
-        # AYNI zirhin TERS YONU (bkz. `reroute_misplaced_infrastructure_
-        # facilities` docstring'i): yanlislikla `infrastructures`e konulmus
-        # askeri us/havalimani/hastane/liman/siginak kayitlarini
-        # `facilities`e tasir.
+   
         raw_json = reroute_misplaced_infrastructure_facilities(raw_json)
-        # İKİNCİ DALGA (bkz. `reroute_misplaced_energy_resources`
-        # docstring'i): yanlışlıkla `energy_infrastructures`e konulmuş
-        # yakıt/gaz depo kayıtlarını `resource_hubs`e taşır.
+ 
         raw_json = reroute_misplaced_energy_resources(raw_json)
 
         result: Dict[str, Any] = {key: [] for key in ENTITY_MODEL_MAP}
@@ -2158,13 +1556,7 @@ class OllamaParser:
         validation_hatalari: List[str] = []
         result["validation_hatalari"] = validation_hatalari
 
-        # 1) Node adaylarini kendi Pydantic siniflarina dogrula.
-        #    Iliskileri kurarken hangi isimlerin gecerli bir varlik olarak
-        #    cikarildigini bilmek icin bir isim kumesi (set) tutulur. Not:
-        #    Neo4j tarafinda dugum kimligi artik `id` (rastgele UUID) DEGIL,
-        #    `isim` uzerinden kuruludur (bkz. database.node_to_cypher); bu
-        #    yuzden iliskiler de dogrudan isim'e gore kurulur, ayrica bir
-        #    isim->id eslemesine gerek yoktur.
+
         known_isimler: set[str] = set()
         for key, model_cls in ENTITY_MODEL_MAP.items():
             for item in raw_json.get(key) or []:
@@ -2174,37 +1566,16 @@ class OllamaParser:
                 result[key].append(node)
                 known_isimler.add(node.isim)
 
-        # 2) Iliski adaylarini (kaynak_isim/hedef_isim uzerinden) Relationship'e cevir.
+ 
         for rel in raw_json.get("relationships") or []:
             relationship = self._coerce_relationship(rel, known_isimler, validation_hatalari)
             if relationship is not None:
                 result["relationships"].append(relationship)
 
-        # "KIRMIZI EKRAN YASAĞI" (bkz. `_yedek_kriz_olayi_uret` docstring'i):
-        # SADECE HİÇBİR varlık tipinde (facilities/infrastructures/.../events)
-        # TEK bir kayıt bile YOKSA devreye girer — normal yoldan TEK bir
-        # varlık bile çıkarılmışsa bu SON ÇARE hiç ÇALIŞTIRILMAZ (asıl
-        # LLM çıkarımının ÖNÜNE ASLA GEÇMEZ, sadece TAM SESSİZLİĞİ doldurur).
+
         varlik_uretildi_mi = any(result[key] for key in ENTITY_MODEL_MAP)
         if not varlik_uretildi_mi:
-            # `raw_response`/`raw_json` sunucu konsoluna loglanır (bkz.
-            # `extract_entities` başındaki "RAW LLM OUTPUT" logu), ancak
-            # Streamlit `--server.headless` modunda ARKA PLANDA çalıştığından
-            # bu konsol çıktısı kullanıcının TARAYICIDA gördüğü hiçbir yerde
-            # GÖRÜNMEZ (sunucu sürecinin stdout'una erişimi yoksa tamamen
-            # KAYIP bilgidir). ÖNEMLİ TEŞHİS: SON ÇARE'nin devreye girmesi,
-            # `_parse_json`in BAŞARISIZ OLDUĞU anlamına GELMEZ — tam
-            # tersine, bu noktaya ulaşılmış olması `_parse_json`in
-            # BAŞARILI olduğunu (aksi halde bir `ValueError` yukarı
-            # fırlayıp bu satıra HİÇ ULAŞILMAZDI) ve modelin SÖZDİZİMSEL
-            # olarak GEÇERLİ ama TÜM listeleri BOŞ bir JSON ürettiğini
-            # gösterir (`format="json"` zaten Ollama'nın çıktısını
-            # dilbilgisi-kısıtlamalı olarak GEÇERLİ JSON'a zorlar — bozuk
-            # sözdizimi bu modda zaten NEREDEYSE İMKANSIZDIR). Bu yüzden
-            # ham LLM yanıtının (kısaltılmış) bir önizlemesi ARTIK
-            # doğrudan bu UI uyarısının İÇİNE gömülür — kullanıcı sunucu
-            # konsoluna erişmeden, TARAYICIDA, Llama3'ün TAM OLARAK ne
-            # döndürdüğünü görebilir.
+
             _ONIZLEME_UZUNLUGU = 600
             ham_onizleme = raw_response.strip()
             if len(ham_onizleme) > _ONIZLEME_UZUNLUGU:
@@ -2230,10 +1601,7 @@ class OllamaParser:
                     f"**Ham LLM yanıtı (teşhis için):**\n```\n{ham_onizleme}\n```"
                 )
             else:
-                # Anahtar-kelime taramasi bile BASARISIZ oldu — hicbir sey
-                # uretilemedi. Bu durumda da ham yaniti GORUNUR yapmak
-                # (sessizce "hicbir sey cikarilamadi" hatasina dusmek
-                # yerine) teshis icin KRITIKTIR.
+     
                 validation_hatalari.append(
                     f"⚠️ LLM metinden hiçbir varlık çıkaramadı ve anahtar-kelime "
                     f"taramasıyla bile yedek bir olay üretilemedi.\n\n"
@@ -2242,18 +1610,10 @@ class OllamaParser:
 
         return result
 
-    # ------------------------------------------------------------------ #
-    # Yardimci (private) metodlar
-    # ------------------------------------------------------------------ #
+
 
     def _invoke_llm(self, text: str, current_time: Optional[str] = None) -> str:
-        """LCEL zincirini calistirir ve LLM'in ham metin cevabini dondurur."""
-        # "KİLİT NOKTASI" DEBUG LOGLAMASI — hangi isteğin takıldığını terminalden
-        # görebilmek için: `_ozet` burada tek bir
-        # metin girdisi olduğu için "[Olay Adı]" yerine metnin ilk ~60
-        # karakteri kullanılır — terminalde HANGİ isteğin takıldığını
-        # ayırt etmeye yeter, ham metnin TAMAMINI loglamak (kişisel/hassas
-        # veri + log gürültüsü riski) yerine BİLİNÇLİ olarak kısaltılmıştır.
+       
         _ozet = text.strip().replace("\n", " ")[:60]
         logger.info("Neo4j/on-hazirlik bitti, LLM'e gonderiliyor: '%s...'", _ozet)
         _baslangic = time.monotonic()
@@ -2261,7 +1621,7 @@ class OllamaParser:
             cevap = self._chain.invoke(
                 {"text": text, "current_time": current_time or _current_time_iso()}
             )
-        except Exception as exc:  # noqa: BLE001 - Ollama baglanti hatalarini sarmalar
+        except Exception as exc:  
             logger.error(
                 "LLM cagrisi BASARISIZ oldu (%.1f sn sonra) '%s...': %s",
                 time.monotonic() - _baslangic, _ozet, exc,
@@ -2278,62 +1638,19 @@ class OllamaParser:
 
     @staticmethod
     def _parse_json(raw_response: str) -> Dict[str, Any]:
-        """LLM cevabindan JSON nesnesini AGRESIF sekilde ayiklar ("KURSUNGECIRMEZ"
-        temizleyici — bkz. canli "kcprusu" hata raporu).
-
-        `ChatOllama(..., format="json")` (bkz. `__init__`) yerel modeli JSON
-        uretmeye ZORLAR — TEKNIK NOT (Kurucu'nun "hala JSON disi karakter
-        uretiyor olmali" varsayimina KARSI, kanitla desteklenen bir
-        DUZELTME): Ollama'da `format="json"`, modelin ORNEKLEME (sampling)
-        asamasini dilbilgisi/grammar KISITLAMASIYLA calistirir — yani model
-        SOZDIZIMSEL olarak GECERSIZ bir JSON tokenini (ör. eksik tirnak,
-        fazladan virgul) matematiksel olarak URETEMEZ. Bu yuzden "bozuk
-        JSON sozdizimi" bu modda ZATEN NEREDEYSE IMKANSIZDIR — GERCEK risk
-        SOZDIZIMI DEGIL, modelin GECERLI ama ISTENMEYEN bir JSON uretmesidir
-        (ör. markdown ile SARILMIS gecerli JSON, ya da TUM listeleri BOS
-        birakilmis "gecerli ama ISE YARAMAZ" bir JSON — bkz. `extract_
-        entities`'teki "KIRMIZI EKRAN YASAGI" SON CARE blogu, ki bu TAM DA
-        boyle bir durumda devreye girer, JSON'UN KENDISI BOZUK oldugu icin
-        DEGIL).
-
-        Yine de bazi yerel modeller (ozellikle kucuk/quantized varyantlar)
-        markdown kod blogu (```json ... ```) ekleyebilir veya basina "Iste
-        sonuc:" gibi bir aciklama koyabilir (grammar kisitlamasi SADECE
-        JSON blogunun KENDISINI degil, one/sonrasina eklenen SERBEST METNI
-        ENGELLEMEZ). Bu yuzden temizlik, "once dene, hata alirsan temizle"
-        (eski davranis) DEGIL, HER ZAMAN ONCEDEN, PROAKTIF olarak uygulanir:
-
-        1. Her turlu ```/```json kod blogu ISARETLEYICISI (basta, sonda,
-           ORTADA -- bazi modeller JSON'u aciklama ile "```json { ... } ```"
-           seklinde ortasina gomer) SILINIR.
-        2. Ardindan metindeki ILK `{` ile SON `}` arasindaki her sey (varsa
-           once/sonraki TUM aciklama metni ATILARAK) alinir.
-        3. "ACIMASIZ" EK TEMIZLIK: bazi modeller —
-           `format="json"` ALTINDA BILE, cunku trailing comma bircok JSON
-           SEMASINDA/parser'inda GECERLI kabul edilebilir bir kalip olarak
-           egitim verisinde sikca gorulur — bir dizinin/nesnenin SON
-           elemanindan SONRA fazladan bir virgul (`, ]` veya `, }`)
-           birakabilir; standart `json.loads` bunu KABUL ETMEZ. Bu ekstra
-           virguller, ayristirmadan ONCE regex ile GUVENLE silinir.
-        4. Sonuc `json.loads` ile ayristirilir; bu bile basarisiz olursa
-           (JSON'un kendisi GERCEKTEN bozuksa) hem ham hem temizlenmis
-           metni iceren acik bir `ValueError` firlatilir.
-        """
+        
         cleaned = raw_response.strip()
 
-        # 1) Markdown kod blogu isaretleyicilerini NEREDE OLURSA OLSUN sil.
+        
         cleaned = re.sub(r"```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
 
-        # 2) Baştaki/sondaki gereksiz aciklama metnini at: ilk `{` ile SON
-        #    `}` arasini al (JSON DISINDAKI HER SEYI agresif sekilde temizler).
+       
         ilk_suslu = cleaned.find("{")
         son_suslu = cleaned.rfind("}")
         if ilk_suslu != -1 and son_suslu != -1 and son_suslu > ilk_suslu:
             cleaned = cleaned[ilk_suslu : son_suslu + 1].strip()
 
-        # 3) "ACIMASIZ" EK TEMIZLIK: bir `]`/`}` KAPANISINDAN HEMEN ONCEKI
-        #    fazladan virgulu (ve arasindaki bosluk/satir sonlarini) sil —
-        #    ör. `[1, 2, ]` -> `[1, 2]`, `{"a": 1, }` -> `{"a": 1}`.
+        
         cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
 
         if not cleaned:
@@ -2351,13 +1668,7 @@ class OllamaParser:
     def _coerce_node(
         model_cls: Type[BaseNode], item: Dict[str, Any], hata_listesi: Optional[List[str]] = None
     ) -> Optional[BaseNode]:
-        """Ham bir varlik dict'ini, once eksik/`None` REQUIRED alanlari
-        varsayilanlarla doldurup (bkz. `apply_required_field_fallbacks` —
-        "KISA/EKSIK METIN KURALI" ile birlikte calisir), sonra Enum
-        alanlarini normalize ederek (bkz. `sanitize_enum_fields`) ilgili
-        BaseNode alt sinifina dogrular. `hata_listesi` verilirse, dogrulama
-        basarisiz olan kayitlarin insan-okur aciklamasi bu listeye eklenir
-        (bkz. `extract_entities`)."""
+        
         doldurulmus = apply_required_field_fallbacks(model_cls, item)
         if model_cls is Event:
             doldurulmus = _gecersiz_event_type_ise_varsayilana_cek(doldurulmus)
@@ -2373,21 +1684,7 @@ class OllamaParser:
             return model_cls(**sanitized)
         except ValidationError as exc:
             isim = item.get("isim", "?")
-            # "PYDANTIC SEVİYESİNDE KATI ÖNLEM" — SESSİZ ATLAMA (Kurucu
-            # talebi, Rize senaryosu): `Facility.facility_type` gerçekten
-            # geçersizse (bkz. `models.GecersizFacilityTuruAtlandi`),
-            # ÇOĞUNLUKLA bunun nedeni LLM'in bir Event/afet türünü (ör.
-            # "Heyelan") yanlışlıkla Facility sanmasıdır — asıl afet
-            # `events` listesindeki DOĞRU kayıtla ZATEN yakalanmış
-            # olmalıdır (bkz. `nlp_parser` kural 16). Bu SPESİFİK hata
-            # türü, kullanıcıya sarı bir UI uyarısı (`hata_listesi`)
-            # OLARAK SIZDIRILMAZ — SADECE log seviyesinde (bilgi amaçlı,
-            # geliştirici görebilsin diye) kaydedilir. Pydantic v2, bir
-            # `model_validator`da fırlatılan özel istisnayı `ValidationError`
-            # içine SARMALAR (bkz. `exc.errors()[i]['ctx']['error']`) —
-            # bu yüzden istisna TÜRÜ burada, `except` bloğunun İÇİNDE
-            # kontrol edilir (doğrudan `except GecersizFacilityTuruAtlandi`
-            # YAKALAYAMAZ, çünkü dışarıya sızan ZATEN bir `ValidationError`dır).
+           
             if model_cls is Facility and any(
                 isinstance(err.get("ctx", {}).get("error"), GecersizFacilityTuruAtlandi)
                 for err in exc.errors()
@@ -2398,11 +1695,7 @@ class OllamaParser:
                     isim, exc,
                 )
                 return None
-            # AYNI GÜVENCE, Infrastructure için (ör. "Marmaris Orman Yangını"
-            # senaryosu; bkz. `models.
-            # GecersizInfrastructureTuruAtlandi` docstring'i): yukarıdaki
-            # Facility bloğuyla BİREBİR AYNI mantık, sadece hedef sınıf ve
-            # istisna türü farklı.
+           
             if model_cls is Infrastructure and any(
                 isinstance(err.get("ctx", {}).get("error"), GecersizInfrastructureTuruAtlandi)
                 for err in exc.errors()
@@ -2429,17 +1722,7 @@ class OllamaParser:
     def _coerce_relationship(
         rel: Dict[str, Any], known_isimler: "set[str]", hata_listesi: Optional[List[str]] = None
     ) -> Optional[Relationship]:
-        """Ham bir iliski dict'ini (isim tabanli) Relationship modeline cevirir.
-
-        `Relationship.kaynak_id`/`hedef_id` alanlari, dogrudan ilgili
-        varliklarin `isim` degerlerini tasir (Neo4j tarafinda dugum kimligi
-        `isim` uzerinden kuruludur, bkz. `database.node_to_cypher`). Eger
-        `kaynak_isim`/`hedef_isim`, bu cagrida cikarilan gecerli varliklar
-        arasinda yoksa (ör. Pydantic dogrulamasi basarisiz oldugu icin
-        atlandiysa), iliski yine de olusturulur ama uyari loglanir; nihai
-        MATCH Neo4j tarafinda basarisiz olursa cagiran taraf (add_relationship)
-        bunu fark edebilir.
-        """
+        
         try:
             kaynak_isim = rel["kaynak_isim"]
             hedef_isim = rel["hedef_isim"]
@@ -2468,7 +1751,7 @@ class OllamaParser:
             return None
 
 
-if __name__ == "__main__":  # pragma: no cover - manuel/hizli deneme amaclidir
+if __name__ == "__main__":  
     logging.basicConfig(level=logging.INFO)
 
     ORNEK_METIN = (
