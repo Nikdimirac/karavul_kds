@@ -1,11 +1,4 @@
-/**
- * KARAVUL — Taktiksel Komuta Merkezi
- * ===================================
- * Bu dosyadaki tipler, `api.py`deki Pydantic yanıt modelleriyle BİREBİR
- * eşleşir (alan adları dahil — backend Türkçe alan adları kullanıyor,
- * burada da AYNI isimler korunur ki iki taraf arasında sessiz bir
- * isim-uyuşmazlığı riski olmasın).
- */
+
 
 export interface TesisDurumu {
   id?: string | null
@@ -23,7 +16,6 @@ export interface AltyapiDurumu {
   enlem: number
   boylam: number
   uzunluk_km?: number | null
-  /** Her ikisi de varsa bu kayıt bir ÇİZGİ (LineString) olarak çizilir; yoksa tek nokta. */
   bitis_enlem?: number | null
   bitis_boylam?: number | null
 }
@@ -59,9 +51,6 @@ export interface YerlesimDurumu {
 
 export interface AltyapiDurumYaniti {
   hasarli_tesisler: TesisDurumu[]
-  /** Durum FARK ETMEKSİZİN (Aktif dahil) TÜM tesisler — bkz. `api.py`daki
-   * `_TUM_TESIS_LISTELEME_LIMITI` docstring'i: `hasarli_tesisler` aktif kriz
-   * yokken her zaman boştur, harita katmanı bu yüzden BUNU kullanır. */
   tum_tesisler: TesisDurumu[]
   kapali_yollar: AltyapiDurumu[]
   aktif_birlikler: BirlikDurumu[]
