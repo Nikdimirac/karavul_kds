@@ -220,10 +220,7 @@ _ACIK_IFADESI_DESENI = re.compile(r"a[çc][ıi]k", re.IGNORECASE)
 def gecerli_mi(sonuc: Dict[str, Any]) -> Tuple[bool, str]:
     
 
-    Returns:
-        `(gecerli, sebep)` — `gecerli=False` ise `sebep` REDDİN gerekçesini
-        (terminale basılacak, insan-okur) bir cümle olarak taşır.
-    """
+    
     oneriler = sonuc.get("taktiksel_oneriler")
     if not isinstance(oneriler, list) or not oneriler:
         return False, "taktiksel_oneriler boş/eksik (motor bir öneri üretemedi)"
