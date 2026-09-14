@@ -1,31 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-mlops/golden_dataset/pilot_test.py
-=====================================
-KARAVUL — Altın Veri Seti — PİLOT TEST (5 örnek, HITL onayı için).
 
-Kullanıcı talebiyle (2026-09-09): 1000'lik asıl üretim döngüsüne geçmeden
-ÖNCE, `war_gaming.py`nin KULLANDIĞI AYNI canlı altyapıyı (gerçek Neo4j
-grafı + `api.py`nin `/api/analyze-crisis` uç noktası → GraphRAG bağlamı)
-kullanarak SADECE 5 örnek üretir ve TAM çıktılarını (Soru + Canlı Veri
-Bağlamı + Kusursuz Yanıt) terminale basar — insan hakem (kullanıcı) üslup/
-mantık onayı verene kadar BAŞKA HİÇBİR ŞEY YAPMAZ (1000'lik döngüye
-otomatik GEÇMEZ).
-
-MİMARİ FARK (war_gaming.py'den): war_gaming.py'nin ürettiği "taktiksel
-öneri" metni doğrudan `karavul-kurmay` LLM'inin SERBEST ürettiği metindir
-(bu YÜZDEN halüsinasyon riski taşır — bkz. AI_MEMORY.md §8/§10). Bu pilot
-İSE, `/api/analyze-crisis`den SADECE `durum_ozeti` (GraphRAG bağlamı — HAM
-GRAF GERÇEKLERİ: gerçek birlik adı, gerçek mesafe, gerçek yol durumu) alır;
-"Kusursuz Yanıt" (Altın Çıktı) bu HAM GERÇEKLERDEN, `scenario_generator.
-altin_cikti_uret()` şablonuyla DETERMİNİSTİK olarak (serbest LLM üretimi
-DEĞİL) inşa edilir. Böylece Altın Veri Seti'nin "hedef" (target) metni,
-tanım gereği hem coğrafi hem de VERİ olarak KESİN doğru olur — modelin
-öğreneceği şey budur.
-
-Kullanım:
-    python -m mlops.golden_dataset.pilot_test
-"""
 
 from __future__ import annotations
 
@@ -42,7 +15,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from mlops.golden_dataset.scenario_generator import (  # noqa: E402
+from mlops.golden_dataset.scenario_generator import (  
     HareketTarziSecenegi,
     OlayTuru,
     RISK_MATRIX,
@@ -55,12 +28,6 @@ from mlops.golden_dataset.scenario_generator import (  # noqa: E402
 API_TABAN_URL = "http://localhost:8000"
 
 
-# ============================================================================
-# BÖLÜM 1 — PİLOT SENARYOLAR (5 adet, 5 farklı bölge, 5 farklı olay türü)
-# ============================================================================
-# Her biri RISK_MATRIX'e karşı DOĞRULANIR (aşağıdaki main() içinde,
-# `senaryo_gecerli_mi` ile) — bu betik KENDİ örneklerine bile körlemesine
-# güvenmez.
 
 PILOT_SENARYOLAR: List[Dict[str, Any]] = [
     {
@@ -106,10 +73,6 @@ PILOT_SENARYOLAR: List[Dict[str, Any]] = [
 ]
 
 
-# ============================================================================
-# BÖLÜM 2 — API ÇAĞRISI (war_gaming.py'nin AYNI uç noktası)
-# ============================================================================
-
 
 def _sifirla() -> None:
     try:
@@ -126,14 +89,7 @@ def _analiz_et(rapor_metni: str) -> Dict[str, Any]:
     return yanit.json()
 
 
-# ============================================================================
-# BÖLÜM 3 — durum_ozeti (HAM GraphRAG METNİ) → YAPILANDIRILMIŞ GERÇEKLER
-# ============================================================================
-# `decision_engine.py::DecisionEngine._kriz_ve_mudahale_bloku`nun ÜRETTİĞİ
-# SABİT formatı hedefler (bkz. o fonksiyonun docstring'i) — format
-# değişirse bu regex'ler de güncellenmeli (Faz 2'de daha sağlam bir
-# çözüm — ör. `format_durum_ozeti`nin JSON/yapılandırılmış bir sürümü —
-# değerlendirilebilir).
+
 
 _BIRINCIL_BIRLIK_DESENI = re.compile(
     r"MÜDAHALE EDECEK BİRLİK: (?P<isim>[^(]+) \(Tip: (?P<tip>[^,]+), .*?"
@@ -149,11 +105,7 @@ _ALTERNATIF_ROTA_DESENI = re.compile(r"Yakındaki AÇIK alternatif güzergahlar:
 
 
 def _gercekleri_ayikla(durum_ozeti: str) -> Dict[str, Any]:
-    """Ham GraphRAG metninden (bkz. modül docstring'i) ALPHA/BRAVO
-    seçeneklerini VE darboğazları inşa etmeye yetecek somut gerçekleri
-    çıkarır. Hiçbir şey UYDURMAZ — bulamadığını `None`/boş liste olarak
-    bırakır, çağıran taraf (bkz. `_altin_yanit_insa_et`) bunu HONESTLY
-    ('bulunamadı') yansıtır."""
+  
     birincil = _BIRINCIL_BIRLIK_DESENI.search(durum_ozeti)
     ikinci_plan = _IKINCI_PLAN_BIRLIK_DESENI.search(durum_ozeti)
     bulunamadi = _BULUNAMADI_DESENI.search(durum_ozeti) is not None and birincil is None
@@ -170,10 +122,7 @@ def _gercekleri_ayikla(durum_ozeti: str) -> Dict[str, Any]:
 
 
 def _altin_yanit_insa_et(il: str, rapor_metni: str, durum_ozeti: str) -> str:
-    # EŞ ANLAMLI İFADE HAVUZU KULLANIMI (bkz. `scenario_generator.secim` —
-    # "papağan döngüsü" önlemi, kullanıcı talebi): aşağıdaki HİÇBİR cümle
-    # sabit/tek bir metin DEĞİLDİR — her çağrıda `_IFADE_HAVUZU`dan
-    # rastgele ama ANLAMCA eşdeğer bir varyant seçilir.
+
     gercekler = _gercekleri_ayikla(durum_ozeti)
     darbogazlar: List[str] = []
 
@@ -226,17 +175,12 @@ def _altin_yanit_insa_et(il: str, rapor_metni: str, durum_ozeti: str) -> str:
     return altin_cikti_uret(durum_sentezi, alpha, bravo, darbogazlar, karar_sorusu)
 
 
-# ============================================================================
-# BÖLÜM 4 — ANA DÖNGÜ (SADECE 5 örnek, terminale bas, DURDUR)
-# ============================================================================
-
 
 def main() -> int:
     print("=" * 90)
     print("KARAVUL — ALTIN VERİ SETİ — PİLOT TEST (5 örnek, HITL onayı bekleniyor)")
     print("=" * 90)
 
-    # Ön kontrol: 5 pilot senaryonun HEPSİ RISK_MATRIX'e göre GERÇEKTEN geçerli mi?
     for s in PILOT_SENARYOLAR:
         gecerli, sebep = senaryo_gecerli_mi(s["il"], s["olay_turu"], s.get("deprem_mw"))
         if not gecerli:
