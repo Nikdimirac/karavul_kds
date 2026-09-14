@@ -1,45 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-mlops/golden_dataset/scenario_generator.py
-============================================
-KARAVUL — "ALTIN VERİ SETİ" (Golden Dataset) — MİMARİ İSKELET (Faz 1/2).
 
-Kullanıcı talebiyle (2026-09-09) mevcut `war_gaming.py` (LLM'in kendi
-kendine ürettiği, otomatik hakemle filtrelenen senaryo akışı) TERK
-EDİLMİYOR ama ONA EK OLARAK, çok daha SIKI/elle-tasarlanmış bir 1000
-senaryoluk "Altın Veri Seti" oluşturuluyor. Amaç iki KESİN kural:
-
-  1. COĞRAFİ SAÇMALIK YASAK — "Karaman'da 8.5 büyüklüğünde deprem" veya
-     "Konya'da liman patlaması" gibi, Türkiye'nin gerçek coğrafyasıyla
-     ÇELİŞEN senaryolar dataset'e ASLA girmemeli. Bu dosyadaki
-     `RISK_MATRIX`, 81 ilin GERÇEK coğrafi/sismik/jeolojik profilini
-     kodlar; bir senaryo üretilmeden ÖNCE (üretici tarafı) VE üretildikten
-     SONRA (bkz. `senaryo_gecerli_mi`, doğrulayıcı tarafı — proje geneli
-     "üretim kuralına güvenmek YETMEZ, kod seviyesinde de doğrula"
-     felsefesiyle AYNI, bkz. `decision_engine.py`daki
-     `_birlik_uydurma_suphesi_mi`/`_ingilizce_supheli_mi`) bu matrise karşı
-     kontrol edilir.
-
-  2. "KDS, AKTÖR DEĞİL" YASAK — Karavul bir KARAR DESTEK SİSTEMİdir, bir
-     EYLEM SİSTEMİ değil. Model ASLA "ekipleri sevk ettim", "yangını
-     söndürdüm", "tahliyeyi tamamladım" gibi TAMAMLANMIŞ, BİRİNCİ TEKİL
-     ŞAHIS eylem cümleleri KURAMAZ — bunlar gerçekte OLMAMIŞ olayları
-     iddia eden bir HALÜSİNASYON türüdür (üstelik gerçek bir komuta
-     zincirinde YETKİ GASPI anlamına gelir). Model SADECE seçenek sunar,
-     komutan/yetkili İNSAN karar verir. Bkz. `ALTIN_CIKTI_SABLONU` (4
-     zorunlu başlık) ve `_yasakli_eylem_kalibi_var_mi` (kod-seviyesi
-     doğrulayıcı).
-
-BU DOSYANIN KAPSAMI (Faz 1 — kullanıcı onayı BEKLENİYOR): `RISK_MATRIX`
-+ geçerlilik doğrulayıcıları + Altın Çıktı şablonu/doğrulayıcısı. 1000
-senaryoyu FİİLEN üretip `war_gaming.py`nin GraphRAG/Ollama boru hattından
-geçirecek üretim döngüsü (Faz 2) BİLİNÇLİ OLARAK bu dosyada YOK — kullanıcı
-önce mimariyi/risk matrisini onaylamak istedi (bkz. `if __name__ ==
-"__main__"` altındaki öz-test, ŞİMDİLİK tek çalıştırılabilir kısım).
-
-Kullanım (Faz 1 doğrulama):
-    python -m mlops.golden_dataset.scenario_generator
-"""
 
 from __future__ import annotations
 
@@ -56,18 +15,10 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 
-# ============================================================================
-# BÖLÜM 1 — COĞRAFİ/SİSMİK GERÇEKLİK: RISK_MATRIX
-# ============================================================================
 
 
 class Bolge(str, Enum):
-    """Klasik 7 coğrafi bölge (istatistiki NUTS bölgeleri DEĞİL — okulda
-    öğretilen, halk arasında bilinen klasik ayrım; sınır illeri [ör.
-    Kahramanmaraş, Çankırı] için kesin çizgi tartışmalı olabilir, ama bu
-    alan SADECE bilgilendirici amaçlı — geçerlilik kararları aşağıdaki
-    SOMUT bayraklara [kiyi_ili, deprem_bolgesi, vb.] dayanır, bu enum'a
-    DEĞİL)."""
+   
 
     MARMARA = "Marmara"
     EGE = "Ege"
@@ -87,53 +38,29 @@ class RiskSeviyesi(str, Enum):
 
 @dataclass(frozen=True)
 class IlRiskProfili:
-    """Bir ilin, senaryo üretimini/doğrulamasını YÖNLENDİREN GERÇEK
-    coğrafi profili. Her alan bir sonraki bölümdeki `gecerli_olay_turleri`/
-    `senaryo_gecerli_mi` tarafından OKUNUR — süs değil, KAPI."""
+
 
     bolge: Bolge
     kiyi_ili: bool
-    """Gerçek deniz kıyısı var mı (Karadeniz/Marmara/Ege/Akdeniz). YOKSA
-    'liman'/'sahil'/'gemi' temalı HİÇBİR senaryo bu ile ATANAMAZ — bkz.
-    kullanıcının 'Konya'da liman patlaması' örneği."""
+
     deprem_bolgesi_afad: int
-    """AFAD Türkiye Deprem Tehlike Haritası'na yakın bir yaklaşımla 1
-    (en yüksek tehlike) — 5 (en düşük tehlike) arası kategori."""
+    
     gercekci_max_deprem_mw: float
-    """Bu ilde TARİHSEL/SİSMOLOJİK olarak MAKUL kabul edilebilecek üst
-    büyüklük sınırı (Mw). Üretilen HİÇBİR deprem senaryosu bunu AŞAMAZ —
-    kullanıcının 'Karaman'da 8.5' örneğini YAPISAL olarak imkansız kılar
-    (Karaman'ın gerçekçi tavanı ~5.5, bkz. aşağıdaki matris)."""
+   
     orman_yangini_riski: RiskSeviyesi
     sel_riski: RiskSeviyesi
     heyelan_riski: RiskSeviyesi
     cig_riski: RiskSeviyesi
-    """Sadece gerçekten yüksek rakımlı/dağlık iller için YUKSEK/ORTA olmalı
-    — kıyı/ova illerinde ASLA çığ senaryosu üretilemez."""
+   
     sanayi_yogunlugu: RiskSeviyesi
-    """Kimyasal depo/fabrika patlaması gibi senaryoların İNANDIRICILIĞINI
-    belirler — kırsal/tarımsal bir ilde 'dev petrokimya patlaması' düşük
-    olasılıklı sayılmalı (YASAK değil ama üretim ağırlığı DÜŞÜK)."""
+  
     sinir_komsusu: Optional[str] = None
-    """Kara sınırı paylaştığı ülke (yoksa None) — sınır/güvenlik/mülteci
-    temalı senaryoların geçerliliği için."""
 
 
-# ----------------------------------------------------------------------
-# 81 İL — plaka numarası sırasıyla (1-81), TAM liste.
-#
-# DÜRÜSTLÜK NOTU: Aşağıdaki değerler (özellikle `gercekci_max_deprem_mw`)
-# genel sismoloji bilgisi (Kuzey Anadolu Fay Hattı, Doğu Anadolu Fay Hattı,
-# Şubat 2023 Kahramanmaraş depremleri bölgesi, Van 2011, Ege graben
-# sistemi vb. BİLİNEN tarihsel/jeolojik gerçekler) kullanılarak MAKUL bir
-# İLK YAKLAŞIM olarak hazırlandı — AFAD'ın resmi ilçe-bazlı tehlike
-# haritasının BİREBİR dijital kopyası DEĞİLDİR. Kullanıcı (proje sahibi)
-# bu değerleri gözden geçirip düzeltebilir; yanlış bir değer bile mevcut
-# durumdan (SINIRSIZ/rastgele büyüklük) KESİNLİKLE daha güvenlidir.
-# ----------------------------------------------------------------------
+
+
 
 RISK_MATRIX: Dict[str, IlRiskProfili] = {
-    # --- MARMARA ------------------------------------------------------
     "İstanbul": IlRiskProfili(Bolge.MARMARA, True, 1, 7.5, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Kocaeli": IlRiskProfili(Bolge.MARMARA, True, 1, 7.6, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Sakarya": IlRiskProfili(Bolge.MARMARA, False, 1, 7.4, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
@@ -145,7 +72,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
     "Edirne": IlRiskProfili(Bolge.MARMARA, False, 3, 6.0, RiskSeviyesi.DUSUK, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK, sinir_komsusu="Yunanistan/Bulgaristan"),
     "Kırklareli": IlRiskProfili(Bolge.MARMARA, False, 3, 6.0, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK, sinir_komsusu="Bulgaristan"),
     "Bilecik": IlRiskProfili(Bolge.MARMARA, False, 2, 6.8, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK),
-    # --- EGE ------------------------------------------------------------
     "İzmir": IlRiskProfili(Bolge.EGE, True, 1, 7.0, RiskSeviyesi.YUKSEK, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Manisa": IlRiskProfili(Bolge.EGE, False, 2, 6.8, RiskSeviyesi.YUKSEK, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Aydın": IlRiskProfili(Bolge.EGE, True, 1, 6.9, RiskSeviyesi.YUKSEK, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
@@ -154,7 +80,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
     "Uşak": IlRiskProfili(Bolge.EGE, False, 2, 6.3, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
     "Kütahya": IlRiskProfili(Bolge.EGE, False, 2, 6.5, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
     "Afyonkarahisar": IlRiskProfili(Bolge.EGE, False, 2, 6.5, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
-    # --- AKDENİZ --------------------------------------------------------
     "Antalya": IlRiskProfili(Bolge.AKDENIZ, True, 2, 6.5, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
     "Isparta": IlRiskProfili(Bolge.AKDENIZ, False, 2, 6.6, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK),
     "Burdur": IlRiskProfili(Bolge.AKDENIZ, False, 1, 6.8, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK),
@@ -163,7 +88,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
     "Osmaniye": IlRiskProfili(Bolge.AKDENIZ, False, 1, 7.6, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA),
     "Hatay": IlRiskProfili(Bolge.AKDENIZ, True, 1, 7.8, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.ORTA, RiskSeviyesi.YOK, RiskSeviyesi.ORTA, sinir_komsusu="Suriye"),
     "Kahramanmaraş": IlRiskProfili(Bolge.AKDENIZ, False, 1, 7.8, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA),
-    # --- İÇ ANADOLU -------------------------------------------------------
     "Ankara": IlRiskProfili(Bolge.IC_ANADOLU, False, 3, 6.0, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Konya": IlRiskProfili(Bolge.IC_ANADOLU, False, 3, 6.0, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Kayseri": IlRiskProfili(Bolge.IC_ANADOLU, False, 3, 6.2, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YUKSEK),
@@ -180,7 +104,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
     "Çorum": IlRiskProfili(Bolge.IC_ANADOLU, False, 2, 6.8, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK),
     "Amasya": IlRiskProfili(Bolge.IC_ANADOLU, False, 1, 7.0, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK),
     "Tokat": IlRiskProfili(Bolge.IC_ANADOLU, False, 1, 7.0, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK),
-    # --- KARADENİZ --------------------------------------------------------
     "Zonguldak": IlRiskProfili(Bolge.KARADENIZ, True, 2, 6.3, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK),
     "Bartın": IlRiskProfili(Bolge.KARADENIZ, True, 2, 6.3, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK),
     "Karabük": IlRiskProfili(Bolge.KARADENIZ, False, 2, 6.3, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, RiskSeviyesi.YUKSEK),
@@ -196,7 +119,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
     "Bayburt": IlRiskProfili(Bolge.KARADENIZ, False, 2, 6.3, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK),
     "Düzce": IlRiskProfili(Bolge.KARADENIZ, False, 1, 7.4, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA),
     "Bolu": IlRiskProfili(Bolge.KARADENIZ, False, 1, 7.4, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK),
-    # --- DOĞU ANADOLU -------------------------------------------------
     "Erzurum": IlRiskProfili(Bolge.DOGU_ANADOLU, False, 1, 7.2, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK),
     "Erzincan": IlRiskProfili(Bolge.DOGU_ANADOLU, False, 1, 7.8, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK),
     "Kars": IlRiskProfili(Bolge.DOGU_ANADOLU, False, 2, 6.8, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, sinir_komsusu="Ermenistan"),
@@ -211,7 +133,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
     "Elazığ": IlRiskProfili(Bolge.DOGU_ANADOLU, False, 1, 7.4, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA),
     "Malatya": IlRiskProfili(Bolge.DOGU_ANADOLU, False, 1, 7.8, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.ORTA, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA),
     "Hakkari": IlRiskProfili(Bolge.DOGU_ANADOLU, False, 1, 6.8, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.YUKSEK, RiskSeviyesi.YUKSEK, RiskSeviyesi.DUSUK, sinir_komsusu="Irak/İran"),
-    # --- GÜNEYDOĞU ANADOLU ------------------------------------------------
     "Gaziantep": IlRiskProfili(Bolge.GUNEYDOGU_ANADOLU, False, 1, 7.8, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.YUKSEK, sinir_komsusu="Suriye"),
     "Adıyaman": IlRiskProfili(Bolge.GUNEYDOGU_ANADOLU, False, 1, 7.8, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.ORTA, RiskSeviyesi.YOK, RiskSeviyesi.DUSUK),
     "Şanlıurfa": IlRiskProfili(Bolge.GUNEYDOGU_ANADOLU, False, 2, 6.8, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.DUSUK, RiskSeviyesi.YOK, RiskSeviyesi.ORTA, sinir_komsusu="Suriye"),
@@ -226,9 +147,6 @@ RISK_MATRIX: Dict[str, IlRiskProfili] = {
 assert len(RISK_MATRIX) == 81, f"RISK_MATRIX 81 il icermeli, {len(RISK_MATRIX)} bulundu — eksik/fazla il var."
 
 
-# ============================================================================
-# BÖLÜM 2 — OLAY TÜRLERİ + COĞRAFİ GEÇERLİLİK DOĞRULAYICISI
-# ============================================================================
 
 
 class OlayTuru(str, Enum):
@@ -248,11 +166,7 @@ class OlayTuru(str, Enum):
     SALDIRI = "Saldiri"
 
 
-# `_gerekli_bayrak` — bir olay türünün GEÇERLİ sayılması için ilin hangi
-# `IlRiskProfili` alanının YOK/DUSUK olmaması (ya da özel bir alanın dolu
-# olması) gerektiğini tanımlar. `None` = coğrafyadan bağımsız, HER ilde
-# üretilebilir (ör. zincirleme kaza — her ilde karayolu var; siber saldırı
-# — fiziksel coğrafyaya bağlı değil).
+
 _KIYI_GEREKTIREN_OLAYLAR = {OlayTuru.LIMAN_YANGINI, OlayTuru.GEMI_KAZASI}
 _SINIR_GEREKTIREN_OLAYLAR = {OlayTuru.SINIR_GUVENLIK_OLAYI}
 _COGRAFYADAN_BAGIMSIZ_OLAYLAR = {
@@ -272,8 +186,8 @@ def gecerli_olay_turleri(il: str) -> List[OlayTuru]:
     `RISK_MATRIX`de olmayan bir il için `KeyError` fırlatır (sessizce
     boş liste dönüp senaryo üretiminin sessizce hiçbir şey üretmemesi
     YERİNE, üretim betiği hatayı AÇIKÇA görsün)."""
-    profil = RISK_MATRIX[il]  # KeyError bilinçli — bkz. docstring.
-    sonuc: List[OlayTuru] = [OlayTuru.DEPREM]  # deprem HER ilde olabilir (büyüklük tavanı ayrı kontrol edilir).
+    profil = RISK_MATRIX[il]  
+    sonuc: List[OlayTuru] = [OlayTuru.DEPREM] 
     sonuc.extend(_COGRAFYADAN_BAGIMSIZ_OLAYLAR)
     if profil.kiyi_ili:
         sonuc.extend(_KIYI_GEREKTIREN_OLAYLAR)
@@ -289,10 +203,7 @@ def gecerli_olay_turleri(il: str) -> List[OlayTuru]:
 def senaryo_gecerli_mi(
     il: str, olay_turu: OlayTuru, deprem_buyuklugu_mw: Optional[float] = None
 ) -> Tuple[bool, str]:
-    """`(gecerli_mi, sebep)` döner. Senaryo üretiminden SONRA bile (LLM'in
-    kendi başına bir şey uydurması ihtimaline karşı — bkz. proje geneli
-    "üretim kuralına güvenme, kod seviyesinde doğrula" ilkesi) HER üretilen
-    örnek bu fonksiyondan geçirilmeli, geçemeyen örnek dataset'e YAZILMAZ."""
+   
     if il not in RISK_MATRIX:
         return False, f"'{il}' RISK_MATRIX'te tanımlı değil (81 il dışında bir isim mi?)."
 
@@ -318,9 +229,6 @@ def senaryo_gecerli_mi(
     return True, "geçerli"
 
 
-# ============================================================================
-# BÖLÜM 3 — "KDS, AKTÖR DEĞİL": ALTIN ÇIKTI ŞABLONU
-# ============================================================================
 
 ALTIN_CIKTI_BASLIKLARI: Tuple[str, str, str, str] = (
     "DURUM SENTEZİ",
@@ -330,23 +238,6 @@ ALTIN_CIKTI_BASLIKLARI: Tuple[str, str, str, str] = (
 )
 
 
-# ----------------------------------------------------------------------
-# EŞ ANLAMLI İFADE HAVUZU ("PAPAĞAN DÖNGÜSÜ" ÖNLEMİ)
-# ----------------------------------------------------------------------
-# SORUN (pilot testte YAKALANDI, bkz. oturum notları): aynı "gerçek veri
-# şekli" (ör. "birlik bulunamadı") tekrar tekrar AYNI birebir cümleyle
-# üretilirse, 1000'lik Altın Veri Setinin BÜYÜK bir kısmı KELİMESİ
-# KELİMESİNE aynı kalıpları taşır — bu, projenin DAHA ÖNCE yaşadığı
-# "papağan döngüsü" (bkz. AI_MEMORY.md madde 9 — model veri farklı
-# seçenek sunsa bile hep AYNI cümleyi ezberleyip tekrarlaması) hatasıyla
-# AYNI KÖKTEN bir risktir; sadece kaynağı DEĞİŞİR (LLM'in kendi ürettiği
-# tekrar DEĞİL, Altın Veri Setinin KENDİSİNİN homojen olması).
-#
-# ÇÖZÜM: her tekrar eden "cümle kalıbı", TEK bir sabit metin DEĞİL, birden
-# çok eş anlamlı VARYANT içeren bir liste olarak tanımlanır; `secim()`
-# HER çağrıda `random.choice` ile bunlardan birini seçer. Aynı ANLAMI
-# taşırlar (gerçek veriyi ÇARPITMAZLAR) — SADECE yüzey biçimi (cümle
-# yapısı/kelime seçimi) değişir.
 _IFADE_HAVUZU: Dict[str, List[str]] = {
     "alpha_bulunamadi": [
         "Bilgi Grafında bu krize doğru yeteneğe sahip ve açık yol ağı üzerinden ulaşabilen bir birlik BULUNAMADI.",
@@ -431,13 +322,6 @@ def secim(havuz_adi: str, **bicim_degiskenleri: Any) -> str:
     return varyant.format(**bicim_degiskenleri) if bicim_degiskenleri else varyant
 
 
-# Model/altın örnek ASLA bu kalıplardaki gibi TAMAMLANMIŞ, birinci tekil/çoğul
-# şahıs EYLEM iddiasında bulunamaz — KDS sadece seçenek sunar, YETKİLİ İNSAN
-# karar verip eylemi BAŞKA bir sistem/birim üzerinden GERÇEKLEŞTİRİR. Bu liste
-# hem (a) altın örnekleri YAZARKEN uyulacak KURAL hem de (b) üretilmiş HER
-# metnin geçip geçmediğini kontrol eden kod-seviyesi DOĞRULAYICI olarak
-# kullanılır (bkz. `_yasakli_eylem_kalibi_var_mi`) — proje geneli
-# "prompt kuralına güvenmek YETMEZ" felsefesiyle TUTARLI.
 _YASAKLI_EYLEM_KALIPLARI: List[str] = [
     r"\b(ekib(i|ini|ler[ıi])|birli(k|ği|ğini)|birim(i|ini)?)\s+(sevk\s+ett[ıi]m|g[öo]nderd[ıi]m|y[öo]nlendird[ıi]m)\b",
     r"\byang[ıi]n[ıi]?\s+s[öo]nd[üu]rd[üu]m\b",
@@ -466,11 +350,11 @@ class HareketTarziSecenegi:
     """Bir Hareket Tarzı (Course of Action) — Alpha ya da Bravo. Kasıtlı
     olarak 'yapıldı' değil 'yapılabilir/önerilir' kipinde alanlar taşır."""
 
-    kod_adi: str  # "ALPHA" | "BRAVO"
-    ozet: str  # tek cümlelik seçenek özeti (ör. "En yakın İtfaiye biriminin 11km üzerinden sevki")
-    kaynaklar: List[str]  # bu seçenek için önerilen birim/kaynak isimleri
+    kod_adi: str  
+    ozet: str  
+    kaynaklar: List[str]  
     tahmini_sure_dk: Optional[int]
-    riskler: List[str]  # bu seçeneğin göze aldığı riskler/varsayımlar
+    riskler: List[str]  
 
 
 def altin_cikti_uret(
@@ -480,11 +364,7 @@ def altin_cikti_uret(
     darbogazlar: List[str],
     karar_sorusu: str,
 ) -> str:
-    """4 zorunlu başlığı, KDS'nin 'aktör değil danışman' kimliğine UYGUN
-    dille üretir. Çağıran taraf `_yasakli_eylem_kalibi_var_mi(sonuc) is
-    None` olduğunu MUTLAKA doğrulamalı (bu fonksiyon kendi ürettiği metni
-    de öz-doğrular, bkz. fonksiyon sonu — çıktı YASAKLI bir kalıp içeriyorsa
-    `ValueError` fırlatır, SESSİZCE geçmez)."""
+    
 
     def _secenek_blogu(secenek: HareketTarziSecenegi) -> str:
         satirlar = [
@@ -516,16 +396,13 @@ def altin_cikti_uret(
 
 
 if __name__ == "__main__":
-    # --- Faz 1 öz-test: RISK_MATRIX + doğrulayıcılar + şablon örneği. ---
     print(f"RISK_MATRIX: {len(RISK_MATRIX)} il yüklü.\n")
 
-    # Kullanıcının verdiği İKİ SOMUT örnek KESİNLİKLE reddedilmeli:
     for il, olay, mw in [("Karaman", OlayTuru.DEPREM, 8.5), ("Konya", OlayTuru.LIMAN_YANGINI, None)]:
         gecerli, sebep = senaryo_gecerli_mi(il, olay, mw)
         durum = "✅ REDDEDİLDİ (doğru)" if not gecerli else "❌ KABUL EDİLDİ (YANLIŞ!)"
         print(f"[{durum}] {il} / {olay.value} / Mw={mw} → {sebep}")
 
-    # Karşı-örnek: gerçekten geçerli bir senaryo kabul EDİLMELİ.
     gecerli, sebep = senaryo_gecerli_mi("Kahramanmaraş", OlayTuru.DEPREM, 7.6)
     print(f"\n[{'✅ KABUL (doğru)' if gecerli else '❌ RED (YANLIŞ!)'}] Kahramanmaraş / Deprem / Mw=7.6 → {sebep}")
     gecerli, sebep = senaryo_gecerli_mi("İzmir", OlayTuru.LIMAN_YANGINI, None)
@@ -535,7 +412,6 @@ if __name__ == "__main__":
     for il in ("Karaman", "Konya", "Rize", "Hatay"):
         print(f"  {il}: {[t.value for t in gecerli_olay_turleri(il)]}")
 
-    # --- Altın Çıktı şablonu örneği ---
     print("\n" + "=" * 78)
     ornek = altin_cikti_uret(
         durum_sentezi=(
