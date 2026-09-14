@@ -20,38 +20,12 @@ import { ALTYAPI_IKON, birlikIkonuGetir, facilityIkonuGetir, RENK, yerlesimIkonu
 import { daireOlustur } from '../utils/geo'
 import type { AltyapiDurumu, AltyapiDurumYaniti } from '../types/domain'
 
-// "FAZ 6: 3B TAKTİKSEL HARİTA" ("2D react-leaflet yapısı C4ISR standartları
-// için yetersiz" ihtiyacına karşı): zemin motoru WebGL tabanlı
-// MapLibre GL'e (react-map-gl/maplibre) taşındı.
-//
-// STİL SEÇİMİ: `basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json`
-// (CartoDB) tercih edilir — UZUN SÜREDİR yerleşik, yaygın olarak
-// erişilebilir bir CDN altyapısına sahiptir ve API anahtarı GEREKTİRMEZ.
-// Doğrulanmış özellikleri: style JSON -> TileJSON -> gerçek `.mvt` vektör
-// karosu -> sprite -> glyph'ler, HEPSİ `Access-Control-Allow-Origin: *`
-// ile 200 döner, filigran YOKTUR — hem gerçekten ücretsiz/anahtarsız HEM
-// DE Esri'nin raster altlığının aksine (eğilince/pitch verilince
-// bulanıklaşır) native VEKTÖR olduğundan 3B eğimde KESKİN kalır.
 const KARANLIK_STIL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 
-// "SADECE TÜRKÇE ETİKET" KURALI: CartoDB temel haritası yer adlarını
-// VERİ KAYNAĞININ KENDİ dilinde gösterir (ör. Yunan adaları için Yunanca
-// yer/idari-bölge adları — bkz. "Αποκεντρωμένη Διοίκηση Αιγαίου" gibi
-// etiketler) — bu, Türkiye odaklı bir taktiksel komuta sisteminde hem
-// tutarsız hem de gereksiz bir görsel gürültüdür. Türkiye içi yer adları
-// zaten kendi `yerlesim-il-etiket`/`yerlesim-ilce-etiket` katmanlarımızca
-// (Neo4j Settlement verisinden, Türkçe) sağlanır — bu yüzden temel
-// haritanın TÜM metin (symbol) katmanları, KENDİ etiket katmanlarımız
-// HARİÇ, gizlenir (silinmez — `visibility: none`, stil yeniden
-// yüklendiğinde/güncellendiğinde tutarlı kalması için `styledata`
-// olayında tekrar uygulanır).
 const KENDI_ETIKET_KATMAN_IDLERI = new Set(['yerlesim-il-etiket', 'yerlesim-ilce-etiket'])
 
 function temelHaritaEtiketleriniGizle(harita: MaplibreMap): void {
-  // Her katman KENDİ try/catch'i İÇİNDE işlenir: `setLayoutProperty` bir
-  // katman için (ör. tanınmayan bir özellik/tip kombinasyonu) İSTİSNA
-  // fırlatırsa, bu TEK katmanın hatası döngünün TAMAMINI durdurup SONRAKİ
-  // (gizlenmesi gereken) katmanları atlanmış bırakmamalıdır.
+
   for (const katman of harita.getStyle()?.layers ?? []) {
     if (
       katman.type === 'symbol' &&
@@ -69,10 +43,7 @@ function temelHaritaEtiketleriniGizle(harita: MaplibreMap): void {
   }
 }
 
-// `src.core.decision_engine.HASARLI_TESIS_DURUMLARI` ile AYNI değerler —
-// bir tesisin `TaktikselRozet` rengini (kırmızı=hasarlı, yeşil=sağlam)
-// belirlemek için burada da tekrarlanır (backend, filtreleme SEÇENEĞİ
-// olarak `tum_tesisler`i durum ayrımı YAPMADAN döner — bkz. `api.py`).
+
 const TESIS_HASARLI_DURUMLARI = ['Hasarlı', 'Yok Edildi']
 
 const BASLANGIC_GORUNUM = {
@@ -87,23 +58,15 @@ interface MapViewProps {
   durum: AltyapiDurumYaniti | null
 }
 
-/** Zemin katman: tam ekran, 3B (pitch/bearing) WebGL taktiksel durum haritası. */
 export default function MapView({ durum }: MapViewProps) {
   const [katmanlar, setKatmanlar] = useState<KatmanGorunurlugu>(VARSAYILAN_KATMAN_GORUNURLUGU)
-  // "DİNAMİK BOYUTLANDIRMA" ("birlikler/olaylar zoom yapıldıkça haritayı
-  // boğmamalı" ilkesi): sadece zoom hareketi BİTTİĞİNDE
-  // güncellenir (`onZoomEnd`) — her animasyon karesinde YÜZLERCE React
-  // Marker'ı yeniden boyutlandırmak (sürekli `onMove`) gereksiz render
-  // maliyeti getirirdi; komutan yakınlaştırmayı BIRAKTIĞI an boyut netleşir.
+
   const [zoom, setZoom] = useState(BASLANGIC_GORUNUM.zoom)
 
   function katmanDegistir(anahtar: keyof KatmanGorunurlugu) {
     setKatmanlar((k) => ({ ...k, [anahtar]: !k[anahtar] }))
   }
 
-  // Kapalı yollar: bitiş koordinatı OLAN kayıtlar ÇİZGİ (LineString),
-  // olmayanlar (bkz. `AltyapiDurumu` — sentetik bir tahmin ÜRETİLMEZ)
-  // TEK bir nokta olarak ayrıştırılır.
   const { cizgiYollar, noktaYollar } = useMemo(() => {
     const cizgiler: AltyapiDurumu[] = []
     const noktalar: AltyapiDurumu[] = []
@@ -132,9 +95,6 @@ export default function MapView({ durum }: MapViewProps) {
     [cizgiYollar],
   )
 
-  // Olay "etki alanı" (km) — MapLibre'nin native circle katmanı yarıçapı
-  // PİKSEL cinsinden aldığından, GERÇEK coğrafi yarıçapı doğru göstermek
-  // için bir Polygon (çokgen) üretilir (bkz. `utils/geo.daireOlustur`).
   const olayDaireleriGeoJSON = useMemo(
     () => ({
       type: 'FeatureCollection' as const,
@@ -145,48 +105,18 @@ export default function MapView({ durum }: MapViewProps) {
     [durum],
   )
 
-  // Zoom arttıkça birlik ikonları büyür (0 => sadece küçük nokta, tam ikon YOK
-  // — düşük zoom'da yüzlerce ikonun haritayı "boğmasını" önler).
   const birlikIkonGoster = zoom >= 6.5
   const birlikBoyutu = zoom < 8 ? 16 : zoom < 10 ? 20 : 24
-
-  // "FAZ 8: SİVİL YERLEŞİM YERLERİ" DİNAMİK BOYUTLANDIRMA: 1057 yerleşim
-  // (82 il + 975 ilçe) `aktif_birlikler`den (500) bile SAYICA FAZLA — aynı
-  // "düşük zoom'da sadece nokta" ilkesi burada da geçerli, AMA il merkezleri
-  // (nüfusça/stratejik önemce daha büyük, sadece 82 tane) ilçe merkezlerinden
-  // DAHA DÜŞÜK bir zoom eşiğinde ikona geçer — ulusal görünümde önce SADECE
-  // il merkezleri belirginleşir, komutan yakınlaştırdıkça ilçe detayı gelir
-  // (bkz. "HİYERARŞİK YOL ÇİZİMİ" ile AYNI kademeli-detay felsefesi).
   const ilIkonGoster = zoom >= 5.5
   const ilceIkonGoster = zoom >= 7.5
   const yerlesimBoyutu = zoom < 8 ? 14 : zoom < 10 ? 18 : 22
 
-  // "PERFORMANS DÜZELTMESİ" (kullanıcı tespiti — "tüm filtreler açıkken
-  // yakınlaştırma/uzaklaştırma kasıyor"): KÖK SEBEP, yerleşim (1057) + tesis
-  // (~3000) + birlik (500) katmanlarının HER NOKTASI için, ikon eşiğinin
-  // ALTINDA bile ayrı bir react-map-gl `<Marker>` (yani gerçek bir DOM
-  // elemanı, MapLibre tarafından her kamera karesinde CSS transform ile
-  // yeniden konumlandırılır) monte ediliyor olmasıydı — ~4500 DOM elemanını
-  // her zoom/pan hareketinde yeniden konumlandırmak ağırdır. ÇÖZÜM: bu üç
-  // katmanın TAMAMI için TEK, WebGL tabanlı bir GeoJSON `circle` katmanı
-  // (bkz. aşağıdaki `*NoktaGeoJSON` + `<Layer type="circle">` kullanımı —
-  // `kapali-yollar`/`olay-daireleri`nin ZATEN kullandığı AYNI desen) HER
-  // ZAMAN altta çizilir (GPU'da TEK çizim çağrısı, nokta sayısından
-  // BAĞIMSIZ olarak ucuzdur); DOM `<Marker>` + ikon rozeti SADECE ilgili
-  // zoom eşiği aşıldığında (komutan zaten yakınlaştırmışken, ki o an daha
-  // az nokta görünür durumdadır) EK bir detay katmanı olarak render edilir
-  // — ikon rozeti, altındaki küçük GL noktasını tamamen örttüğü için çift
-  // çizim GÖRSEL OLARAK fark edilmez.
   const yerlesimNoktaGeoJSON = useMemo(
     () => ({
       type: 'FeatureCollection' as const,
       features: katmanlar.yerlesimBolgeleri
         ? (durum?.yerlesimler ?? []).map((y) => ({
             type: 'Feature' as const,
-            // "isim" — aşağıdaki native GL metin (symbol) etiket katmanının
-            // kaynağı (bkz. "YERLEŞİM ADI ETİKETLERİ" notu); ikon rozetleri
-            // GİBİ ayrı bir React state/zoom-takibi GEREKTİRMEZ, MapLibre
-            // kendi `minzoom`/collision-detection motoruyla halleder.
             properties: { ilMerkezi: y.yerlesim_tipi === 'Il Merkezi', isim: y.isim },
             geometry: { type: 'Point' as const, coordinates: [y.boylam, y.enlem] },
           }))
@@ -229,19 +159,6 @@ export default function MapView({ durum }: MapViewProps) {
     [durum, katmanlar.birlikler],
   )
 
-  // "SESSİZ SİYAH ZEMİN" RİSKİNE KARŞI KORUMA ("harita JSON'u başarılı
-  // dönse bile zemin yok, noktalar uzay boşluğunda süzülüyor" riski): CSS
-  // import'u VE container boyutlandırması KOD SEVİYESİNDE ZATEN doğrudur
-  // (bkz. yukarıdaki import + `style={{width:'100%',height:'100%'}}`). Bu
-  // proje boyunca tekrar tekrar uygulanan "asla sessizce yutma/başarısız
-  // olma" ilkesiyle AYNI mantık
-  // burada da geçerli: eğer harita GERÇEKTEN yüklenemiyorsa (ör. WebGL bu
-  // tarayıcıda/oturumda KULLANILAMIYOR — MapLibre'nin TEK sert önkoşulu;
-  // eski `react-leaflet` DOM/Canvas2D tabanlı olduğu için bu sınırlamayı
-  // TAŞIMIYORDU), kullanıcı bunu SESSİZ bir siyah ekran yerine AÇIKÇA
-  // görmelidir. `onError`/`onLoad` ile TAKİP edilir; harita makul bir
-  // sürede (8 sn) yüklenmez VEYA bir hata fırlatırsa, aşağıdaki tanılayıcı
-  // uyarı KESİN olarak gösterilir.
   const [haritaDurumu, setHaritaDurumu] = useState<'yukleniyor' | 'yuklendi' | 'hata'>('yukleniyor')
   const [haritaHatasi, setHaritaHatasi] = useState<string | null>(null)
   const haritaRef = useRef<MapRef>(null)
@@ -310,8 +227,7 @@ export default function MapView({ durum }: MapViewProps) {
           </Source>
         )}
 
-        {/* Sivil yerleşim bölgeleri — GL taban noktası (bkz. yukarıdaki
-            "PERFORMANS DÜZELTMESİ" notu): TÜMÜ, ikon eşiğinden BAĞIMSIZ. */}
+      
         <Source id="yerlesim-noktalari" type="geojson" data={yerlesimNoktaGeoJSON}>
           <Layer
             id="yerlesim-nokta-katman"
@@ -322,15 +238,7 @@ export default function MapView({ durum }: MapViewProps) {
               'circle-opacity': 0.9,
             }}
           />
-          {/* "YERLEŞİM ADI ETİKETLERİ": eskiden yerleşim isimleri SADECE fare üzerine
-              gelindiğinde (`title` tooltip) görünüyordu — profesyonel bir
-              taktiksel haritada yer adları KALICI etiket olmalı. Native GL
-              `symbol` katmanı kullanılır (React `<Marker>` DEĞİL) ki
-              yüzlerce etiket EK DOM/state maliyeti getirmesin; MapLibre'nin
-              kendi çakışma-önleme (collision) motoru komşu etiketleri
-              otomatik gizler. İl/ilçe ayrımı, ikon rozetlerindeki AYNI
-              kademeli-zoom eşiğini (`ilIkonGoster`/`ilceIkonGoster` — 5.5/
-              7.5) `minzoom` ile birebir yansıtır. */}
+       
           <Layer
             id="yerlesim-il-etiket"
             type="symbol"
@@ -374,8 +282,6 @@ export default function MapView({ durum }: MapViewProps) {
           />
         </Source>
 
-        {/* Sivil yerleşim bölgeleri (il/ilçe merkezleri) — ikon DETAYI, SADECE
-            ilgili zoom eşiği aşıldığında (dinamik boyutlandırma). */}
         {katmanlar.yerlesimBolgeleri &&
           durum?.yerlesimler.map((yerlesim, i) => {
             const ilMerkeziMi = yerlesim.yerlesim_tipi === 'Il Merkezi'
@@ -412,9 +318,6 @@ export default function MapView({ durum }: MapViewProps) {
             </Marker>
           ))}
 
-        {/* Tesisler — GL taban noktası, durum rengiyle (yeşil=sağlam,
-            kırmızı=hasarlı); filtre kutucukları GeoJSON üretiminde ZATEN
-            uygulanmış (bkz. `tesisNoktaGeoJSON`). */}
         <Source id="tesis-noktalari" type="geojson" data={tesisNoktaGeoJSON}>
           <Layer
             id="tesis-nokta-katman"
@@ -427,12 +330,6 @@ export default function MapView({ durum }: MapViewProps) {
           />
         </Source>
 
-        {/* Tesisler (hastane/havalimanı/liman/askeri üs) — BULGU DÜZELTMESİ:
-            eskiden SADECE `hasarli_tesisler` çizilirdi, bu da aktif kriz
-            yokken (çoğu zaman) haritanın TAMAMEN boş görünmesine yol açardı
-            (bkz. `api.py`daki `_TUM_TESIS_LISTELEME_LIMITI` notu). Artık
-            durum FARK ETMEKSİZİN tüm tesisler GL katmanında çizilir; ikon
-            DETAYI SADECE ilgili zoom eşiği aşıldığında eklenir. */}
         {durum?.tum_tesisler.map((tesis, i) => {
           if (tesis.tip === 'Havalimani' && !katmanlar.havalimanlari) return null
           if (tesis.tip === 'Liman' && !katmanlar.limanlar) return null
@@ -457,10 +354,6 @@ export default function MapView({ durum }: MapViewProps) {
           )
         })}
 
-        {/* Aktif birlikler — GL taban noktası. BULGU DÜZELTMESİ (kullanıcı
-            tespiti — "mavi yıldızlı [Polis] konumlar için filtre yok"):
-            filtre artık tip AYRIMI YAPMADAN `katmanlar.birlikler`e bağlı
-            (bkz. `birlikNoktaGeoJSON` + `TacticalFilters`teki ilgili not). */}
         <Source id="birlik-noktalari" type="geojson" data={birlikNoktaGeoJSON}>
           <Layer
             id="birlik-nokta-katman"
@@ -516,7 +409,6 @@ interface TaktikselRozetProps {
   children: ReactNode
 }
 
-/** Tüm nokta işaretçilerinin (tesis/yol/birlik) paylaştığı ortak "rozet" çerçevesi. */
 function TaktikselRozet({ renk, baslik, boyutPx = 22, children }: TaktikselRozetProps) {
   return (
     <div
