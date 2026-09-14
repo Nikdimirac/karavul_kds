@@ -1,13 +1,6 @@
 import type { Feature, Polygon } from 'geojson'
 
-/**
- * Bir merkez nokta etrafında, GERÇEK dünya yarıçapı (km) ile yaklaşık bir
- * daire Polygon üretir — MapLibre'nin native `circle` katmanı yarıçapı
- * PİKSEL cinsinden aldığından (coğrafi ölçek DEĞİL), bir olayın gerçek
- * "etki alanı"nı (km) doğru göstermek için bunun yerine bir GeoJSON
- * Polygon (çokgen) üretilir — ek bir bağımlılık (turf.js) GEREKMEDEN, düz
- * trigonometri ile.
- */
+/
 export function daireOlustur(
   merkezBoylam: number,
   merkezEnlem: number,
