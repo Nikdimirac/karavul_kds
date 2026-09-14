@@ -1,48 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-expand_facility_coverage.py
-=============================
-KARAVUL — "VERİTABANI GENİŞLETME" (kullanıcı talebi — "Diyarbakır Jet Üssü"
-canlı hatası SONRASI: "sığ düşünme güncellemeleri yaparken veri tabanında,
-sistemimiz gibi veri tabanımız da zeki olmalı ... bir karar destek
-sisteminde olması gereken bütün nokta ve bölgeler eklensin").
-
-Bu betik, `run_real_data.py`nin AKSİNE, veritabanını SİLMEZ (`clear_
-database` ÇAĞRILMAZ) — SADECE `RealOsmLoader`in şimdi genişletilmiş nokta
-sorgusuyla (bkz. `osm_loader.OSMBaselineLoader._build_point_query` — YENİ
-eklenen havalimanı/liman/santral/trafo/baraj/baz istasyonu/yakıt
-istasyonu etiketleri) TÜM 81 il için EKSİK olan tesisleri EKLER
-(`Neo4jConnection.add_node`'un isim-bazlı MERGE'i sayesinde zaten var olan
-kayıtlar KOPYALANMAZ, sadece EKSİK olanlar eklenir/güncellenir).
-
-PERFORMANS DÜZELTMESİ (canlı tespit — bkz. oturum notları): bu betiğin İLK
-sürümü `RealOsmLoader.build_nodes()`i OLDUĞU GİBİ kullanıyordu — bu jeneratör
-HER il için nokta (tesis) sorgusunun YANI SIRA sokak/köprü ağını da (`ham
-["yollar"]`) BAŞTAN yield ediyordu. Sokak ağı bu projede ZATEN eksiksiz
-yüklüydü (967K+ Street düğümü, bkz. AI_MEMORY.md); ama `real_osm_loader.py`
-her yol segmentinin TÜM ara koordinat noktalarını AYRI birer nokta-düğümü
-olarak ürettiğinden (bkz. o modülün docstring'i — "şehir damarları" tasarım
-kararı), TEK bir orta ölçekli il (Adana) bile 37.647 way segmentinden
-YÜZ BİNLERCE Street noktası üretti; `add_node`'un HER kayıt için yaptığı
-bulanık-isim MERGE kontrolü ile bu, 3.7 SAATTE HÂLÂ İLK İLİ bitirememe
-sonucunu doğurdu (81 il için GERÇEKÇİ OLMAYAN bir süre). ÇÖZÜM (İKİ AŞAMALI):
-İLK denemede sadece DB YAZMA adımı (`ham["yollar"]` işlenmedi) atlandı, ama
-`RealOsmLoader._fetch_raw_elements_for` YİNE DE HER il için sokak/köprü
-Overpass sorgusunu ÇEKMEYE devam etti (Adana için ~60 sn BOŞA harcanan ağ
-süresi) — bu betik artık `RealOsmLoader._build_point_query` + modül-seviyesi
-`_run_overpass_query`yi DOĞRUDAN çağırır, sokak/köprü sorgusu Overpass'a
-HİÇ GÖNDERİLMEZ. SADECE nokta/tesis elemanları (tipik bir il için birkaç
-yüz eleman, ~1 dakikadan kısa) çekilip `OSMBaselineLoader._convert_point_
-elements`e verilir — sokak/köprü ağı (zaten eksiksiz yüklü) NE ÇEKİLİR NE
-İŞLENİR.
-
-İl listesi HARDCODE EDİLMEZ — zaten yüklü `Settlement` (İl Merkezi)
-düğümlerinden OKUNUR (bkz. `add_settlements.py`) ki 81 il TAM OLARAK aynı
-kaynaktan (OSM admin_level=4) tutarlı kalsın.
-
-Çalıştırmak için (proje kökünden, Neo4j ZATEN çalışıyorken):
-    python expand_facility_coverage.py
-"""
 
 from __future__ import annotations
 
@@ -58,9 +13,9 @@ if hasattr(sys.stdout, "reconfigure"):
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-from src.core.database import Neo4jConnection, Neo4jConnectionError  # noqa: E402
-from src.data_ingestion.osm_loader import OSMBaselineLoader  # noqa: E402
-from src.data_ingestion.real_osm_loader import (  # noqa: E402
+from src.core.database import Neo4jConnection, Neo4jConnectionError 
+from src.data_ingestion.osm_loader import OSMBaselineLoader  
+from src.data_ingestion.real_osm_loader import (  
     RealOsmLoader,
     _run_overpass_query,
     _SEHIRLER_ARASI_BEKLEME_SANIYE,
@@ -68,12 +23,7 @@ from src.data_ingestion.real_osm_loader import (  # noqa: E402
 
 
 def _il_listesini_getir(db: Neo4jConnection) -> List[str]:
-    """Zaten yüklü `Settlement` (İl Merkezi) düğümlerinden 81 il adını okur
-    — `add_settlements.py`nin ZATEN doğruladığı, OSM admin_level=4 tabanlı
-    TEK kaynak (bkz. modül docstring'i). Boş dönerse (Settlement hiç
-    yüklenmemişse) `RealOsmLoader`in kendi tek-şehir varsayılanına
-    (`_VARSAYILAN_SEHIRLER = ("Elazığ",)`) düşülür — bu betik ASLA
-    sessizce hiçbir şey yapmadan çıkmaz."""
+    
     sonuc = db.execute_query(
         'MATCH (s:Settlement) WHERE s.yerlesim_tipi = "Il Merkezi" RETURN DISTINCT s.isim AS isim ORDER BY isim',
         {},
@@ -116,11 +66,7 @@ def main() -> int:
             time.sleep(_SEHIRLER_ARASI_BEKLEME_SANIYE)
         print(f"\n=== [{idx + 1}/{len(loader.sehirler)}] {il} işleniyor ===")
         try:
-            # BİLİNÇLİ OLARAK `RealOsmLoader._fetch_raw_elements_for` YERİNE
-            # SADECE nokta/tesis sorgusu doğrudan çalıştırılır — o metod HER
-            # ZAMAN sokak/köprü sorgusunu da (`ham["yollar"]`) Overpass'tan
-            # ÇEKER (bu betiğin KULLANMADIĞI, sadece ağ/zaman maliyeti
-            # getiren bir veri), bkz. modül-üstü "PERFORMANS DÜZELTMESİ" notu.
+            .
             nokta_elemanlari = _run_overpass_query(RealOsmLoader._build_point_query(il))["elements"]
         except RuntimeError as exc:
             logger.error("[%s] BOLGE ATLANDI (hata cekildi, diger iller ETKILENMEZ): %s", il, exc)
