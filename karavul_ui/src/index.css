@@ -1,10 +1,5 @@
 @import "tailwindcss";
-/* "Faz 6: 3B Taktiksel Harita" — react-leaflet SÖKÜLDÜ, yerine WebGL
-   tabanlı `react-map-gl`/`maplibre-gl` geldi (bkz. `MapView.tsx`);
-   `maplibre-gl/dist/maplibre-gl.css` component-içinde import edilir. */
-
-/* KARAVUL — Taktiksel Komuta Merkezi
-   Tema: tam koyu, füme/antrasit zemin, sadece kriz/rota renkleri vurgu. */
+/
 @theme {
   --color-cmd-950: #0a0e17;
   --color-cmd-900: #0f172a;
@@ -29,10 +24,7 @@
 
   --font-sans: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  /* "SUNUM CİLASI": başlık/panel-etiketi/HUD rakamlarında kullanılan
-     köşeli, taktiksel bir gösterge yazı tipi — gövde metninden BİLİNÇLİ
-     olarak ayrılır ki komuta merkezi hissi güçlensin (bkz. `index.html`
-     Google Fonts bağlantısı). */
+ 
   --font-display: "Rajdhani", var(--font-sans);
 }
 
@@ -55,9 +47,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* MapLibre GL: karargah temasına uydur — varsayılan açık zemin/kontrol
-   stilleri görünmesin (react-leaflet'teki AYNI amaçlı override'ın MapLibre
-   karşılığı). */
+
 .maplibregl-map {
   background: var(--color-cmd-950);
   font-family: var(--font-sans);
@@ -84,7 +74,6 @@ body {
   filter: invert(1) brightness(1.6);
 }
 
-/* İnce, karargah-tipi kaydırma çubuğu (panel içerikleri için). */
 .scroll-thin::-webkit-scrollbar {
   width: 6px;
 }
@@ -96,7 +85,6 @@ body {
   border-radius: 3px;
 }
 
-/* Nabız (pulse) animasyonu — kritik olay işaretçileri için. */
 @keyframes karavul-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
@@ -109,12 +97,7 @@ body {
   animation: karavul-pulse 1.8s ease-out infinite;
 }
 
-/* "SUNUM CİLASI" — komuta-merkezi HUD hissi veren, TAMAMEN dekoratif
-   (pointer-events: none, MapView'in ÜZERİNDE ama panellerin ALTINDA,
-   bkz. `App.tsx`daki z-index sırası) sabit katmanlar. Çok düşük opaklıkta
-   tutulur ki hem koyu hem parlak harita bölgelerinde okunabilirlik
-   ASLA bozulmasın — amaç "oyunlaştırmak" değil, kurumsal derinlik
-   hissi eklemek. */
+
 .hud-topscrim {
   background: linear-gradient(to bottom, rgba(10, 14, 23, 0.55) 0%, rgba(10, 14, 23, 0) 100%);
 }
