@@ -1,46 +1,4 @@
-"""
-Kriz ve Afet Yönetimi Karar Destek Sistemi
-===========================================
-TUCBS (Türkiye Ulusal Coğrafi Bilgi Sistemi) — Büyük Veri (Big Data) ETL
-Yükleme Modülü.
 
-Bu modül, "Proof of Concept" (Elazığ pilot bölgesi, `osm_loader.py`) ölçeğinden,
-tüm Türkiye'yi sokak/mahalle düzeyinde kapsayacak (MİLYONLARCA düğüm) bir
-Enterprise Karar Destek Sistemi'ne geçişin FAZ 2 bileşenidir. `osm_loader.py`
-düzinelerce/yüzlerce düğümü TEK TEK (`add_node` ile, düğüm başına bir Cypher
-round-trip) yazarken, bu modül milyonlarca satırı BELLEĞİ ŞİŞİRMEDEN ve
-Neo4j'e binlerce ayrı istek atmadan yazacak şekilde tasarlanmıştır:
-
-  1. `bulk_insert_nodes` / `bulk_insert_relationships`: `UNWIND` tabanlı
-     TOPLU (batch, varsayılan 10.000 satır) yazma. Girdi bir ITERABLE'dır
-     (generator kabul eder) — tüm veri asla tek seferde belleğe alınmaz.
-  2. `generate_mock_tucbs_data`: Henüz elimizde gerçek bir TUCBS dosyası
-     olmadığından, gerçekçi (Elazığ bbox'ı içinde, idari hiyerarşili) sahte
-     veri üreten bir GENERATOR — gerçek bir GeoJSON/CSV okuyucusunun
-     (Faz 3) yerini geçici olarak tutar; API'si (bir `Iterator[BaseNode]`
-     döndürmesi) ile gerçek okuyucuyla DEĞİŞTİRİLEBİLİR olacak şekilde
-     tasarlanmıştır.
-
-MİMARİ KARAR (asenkron/senkron): Mevcut `Neo4jConnection`, resmi SENKRON
-`neo4j` sürücüsünü (GraphDatabase.driver/Session) kullanır. Buradaki gerçek
-performans kazancı EŞ ZAMANLILIKTAN (concurrency) değil, N ayrı yazma
-çağrısını N/batch_size'a indiren UNWIND-batch stratejisinden gelir; bu yüzden
-BİLİNÇLİ olarak "optimize senkron" seçilmiş, mevcut sync mimariyle ÇATIŞAN
-paralel bir async sürücü/oturum yığını EKLENMEMİŞTİR (gerçek eş zamanlı
-yazma —ör. çok işçili bir yükleme kümesi— gerekirse, Faz 3'te `neo4j`'nin
-`AsyncGraphDatabase` sürücüsüyle AYRI bir bağlantı katmanı olarak
-değerlendirilebilir).
-
-MİMARİ KISIT (multi-label + UNWIND): Neo4j'de düğüm etiketleri VE ilişki
-tipleri Cypher'da LİTERAL olmak zorundadır (parametrize edilemez). Bu yüzden
-TEK bir UNWIND sorgusuna farklı etiket/ilişki-tipi kombinasyonuna sahip
-satırlar KARIŞTIRILAMAZ; her iki toplu yazma metodu da girdi akışını bu
-kombinasyona göre GRUPLAYIP her grup için ayrı (ama yine batch'lenmiş) bir
-UNWIND sorgusu çalıştırır (bkz. `_dugum_grubunu_yaz`/`_iliski_grubunu_yaz`).
-
-Çalıştırmak için:
-    python -m src.data_ingestion.tucbs_etl_loader
-"""
 
 from __future__ import annotations
 
@@ -72,36 +30,19 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 10_000
 
-# Etiket-grubu anahtarı: (kategori_etiketi, (ek_etiket1, ek_etiket2, ...)).
-# Tuple kullanılır çünkü dict anahtarı (gruplama) olarak hashlenebilir olmalı.
+
 _LabelGroupKey = Tuple[str, Tuple[str, ...]]
 
 
-# ---------------------------------------------------------------------------
-# Toplu (batch) yazma motoru
-# ---------------------------------------------------------------------------
 
 
 class TucbsETLLoader:
-    """TUCBS (veya benzeri) büyük hacimli coğrafi/idari açık veri
-    kaynaklarını Neo4j Bilgi Grafı'na, bellek disiplinli ve batch-optimize
-    bir şekilde yükleyen kurumsal ETL bileşeni.
-
-    Kullanım:
-        loader = TucbsETLLoader(Neo4jConnection())
-        hiyerarsi: List[Relationship] = []
-        sayaclar = loader.bulk_insert_nodes(
-            generate_mock_tucbs_data(count=50_000, hiyerarsi_iliskileri_cikti=hiyerarsi)
-        )
-        loader.bulk_insert_relationships(hiyerarsi)
-    """
+  
 
     def __init__(self, db: Optional[Neo4jConnection] = None) -> None:
         self.db = db or Neo4jConnection()
 
-    # ------------------------------------------------------------------ #
-    # Toplu dugum (node) yazma
-    # ------------------------------------------------------------------ #
+
 
     def bulk_insert_nodes(
         self,
@@ -110,23 +51,7 @@ class TucbsETLLoader:
         progress: bool = True,
         toplam_tahmini: Optional[int] = None,
     ) -> Dict[str, int]:
-        """Büyük hacimli bir düğüm akışını (`nodes`, bir generator OLABİLİR)
-        Neo4j'e `UNWIND` ile toplu (batch) olarak yazar.
-
-        Bellek disiplini: `nodes` bir ITERABLE'dır; tüm liste bellekte
-        TUTULMAZ — sadece o an biriken bir batch'lik (varsayılan 10.000)
-        satır bellekte tutulur, dolar dolmaz Neo4j'e yazılıp hemen atılır.
-        Bu, `generate_mock_tucbs_data` gibi bir generator'dan veya gerçek bir
-        CSV/GeoJSON stream okuyucusundan gelen MİLYONLARCA satırı, kaç satır
-        olursa olsun SABİT bir bellek tavanıyla işleyebilmek için ZORUNLUDUR.
-
-        Multi-label kısıtlaması (bkz. modül docstring'i): akış, her düğümün
-        `neo4j_labels()` sonucuna (kategori + ikincil etiket) göre gruplanır;
-        her grup kendi batch'lerini bağımsız doldurur ve doldukça yazar.
-
-        Returns:
-            Kategori etiketi (ör. "Infrastructure") -> yazılan düğüm sayısı.
-        """
+        
         tamponlar: Dict[_LabelGroupKey, List[Dict[str, Any]]] = {}
         sayaclar: Dict[str, int] = {}
 
@@ -152,7 +77,6 @@ class TucbsETLLoader:
                 sayaclar[grup_anahtari[0]] = sayaclar.get(grup_anahtari[0], 0) + yazilan
                 tamponlar[grup_anahtari] = []
 
-        # Kalan (batch_size'i doldurmamis) tum gruplari isin sonunda yaz.
         for grup_anahtari, satirlar in tamponlar.items():
             if satirlar:
                 yazilan = self._dugum_grubunu_yaz(grup_anahtari, satirlar)
@@ -161,21 +85,14 @@ class TucbsETLLoader:
         return sayaclar
 
     def _dugum_grubunu_yaz(self, grup_anahtari: _LabelGroupKey, satirlar: List[Dict[str, Any]]) -> int:
-        """Tek bir (kategori_etiketi, ek_etiketler) grubuna ait satır listesini
-        TEK bir `UNWIND` sorgusuyla Neo4j'e yazar (bkz. `bulk_insert_nodes`).
-        """
+
         kategori_etiketi, ek_etiketler = grup_anahtari
         ek_set_clause = ""
         if ek_etiketler:
             ek_etiket_str = "".join(f":{etiket}" for etiket in ek_etiketler)
             ek_set_clause = f" SET n{ek_etiket_str}"
 
-        # `konum` (Point): bkz. `database._konum_point_ifadesi` docstring'i
-        # ("MEKANSAL INDEKSLEME" notu) — tekil `add_node` yolundaki AYNI
-        # mantik, UNWIND-batch yolu icin de burada tekrarlanir (Cypher
-        # string uretimi iki yolda da BAGIMSIZ oldugundan, tek fonksiyona
-        # cikaramiyoruz; ama AYNI `_konum_point_ifadesi` yardimcisindan
-        # uretilir ki iki yol birbirinden SENKRON DISI kalmasin).
+
         query = (
             "UNWIND $rows AS row "
             f"MERGE (n:{kategori_etiketi} {{isim: row.isim}}) "
@@ -189,9 +106,7 @@ class TucbsETLLoader:
         sonuc = self.db.execute_query(query, {"rows": satirlar}, write=True)
         return sonuc[0]["yazilan"] if sonuc else 0
 
-    # ------------------------------------------------------------------ #
-    # Toplu iliski (relationship) yazma
-    # ------------------------------------------------------------------ #
+
 
     def bulk_insert_relationships(
         self,
@@ -200,21 +115,7 @@ class TucbsETLLoader:
         progress: bool = True,
         toplam_tahmini: Optional[int] = None,
     ) -> int:
-        """`bulk_insert_nodes` ile AYNI batch/gruplama stratejisiyle, büyük
-        hacimli bir ilişki akışını Neo4j'e yazar.
 
-        İlişki TİPİ (`tip`) da tıpkı etiketler gibi Cypher'da literal olmak
-        zorunda olduğundan (parametrize edilemez, bkz.
-        `database.relationship_to_cypher`'daki aynı kısıtlama), akış `tip`e
-        göre gruplanır.
-
-        ÖNEMLİ: Uç noktalar (`kaynak_id`/`hedef_id`, pratikte `isim` taşır —
-        bkz. `models.Relationship`) bu toplu yol üzerinde `add_relationship`
-        gibi bulanık (fuzzy) isim çözümlemesinden GEÇMEZ — performans için
-        bilinçli bir ödünleşimdir; bu yüzden ilişkiler, karşılık gelen
-        düğümler ZATEN yazılmış TAM isimlerle verilmelidir (ki
-        `generate_mock_tucbs_data`'nın ürettiği ilişkiler zaten böyledir).
-        """
         tamponlar: Dict[RelationshipType, List[Dict[str, Any]]] = {}
         yazilan_toplam = 0
 
@@ -254,13 +155,6 @@ class TucbsETLLoader:
         return sonuc[0]["yazilan"] if sonuc else 0
 
 
-# ---------------------------------------------------------------------------
-# Mock TUCBS veri ureteci
-# ---------------------------------------------------------------------------
-
-# Elazığ'ın gerçek 11 ilçesi (idari hiyerarşi katmanının SABİT/gerçekçi
-# iskeleti; `count` parametresine göre ÖLÇEKLENMEZ — bir il her zaman sabit
-# sayıda ilçeye sahiptir, "büyük veri" hacmi asıl sokak/köprü katmanından gelir).
 _ELAZIG_ILCELERI: Tuple[str, ...] = (
     "Merkez", "Kovancilar", "Karakocan", "Palu", "Baskil",
     "Agin", "Aricak", "Alacakaya", "Sivrice", "Maden", "Keban",
@@ -279,17 +173,13 @@ _HASTANE_TURU_ADLARI: Tuple[str, ...] = (
     "Devlet Hastanesi", "Egitim ve Arastirma Hastanesi", "Ozel Hastanesi",
 )
 
-# count'tan BAGIMSIZ, sabit boyutlu idari referans katmani.
 _MOCK_MAHALLE_SAYISI = 300
 
 
 def _rastgele_bitis_noktasi(
     rastgele: random.Random, enlem: float, boylam: float, uzunluk_km: float
 ) -> Tuple[float, float]:
-    """Bir başlangıç noktasından, rastgele bir yönde (bearing) `uzunluk_km`
-    kadar uzaklıkta kaba (1° ≈ 111 km) bir bitiş noktası üretir — mock
-    Infrastructure kayıtlarının `bitis_enlem`/`bitis_boylam` alanlarını
-    (bkz. `models.Infrastructure`) doldurmak için kullanılır."""
+
     bearing_derece = rastgele.uniform(0, 360)
     mesafe_derece = uzunluk_km / 111.0
     bearing_rad = math.radians(bearing_derece)
@@ -304,39 +194,7 @@ def generate_mock_tucbs_data(
     seed: Optional[int] = None,
     hiyerarsi_iliskileri_cikti: Optional[List[Relationship]] = None,
 ) -> Iterator[BaseNode]:
-    """Elazığ bbox'ı içinde, gerçek TUCBS dosyası gelene kadar `bulk_insert_nodes`'u
-    uçtan uca sınamak için GERÇEKÇİ (ama sahte) bir düğüm akışı ÜRETEN generator.
-
-    `count`, ÖLÇEKLENEN katmanı (Sokak/Köprü/Hastane) belirler; idari
-    hiyerarşi katmanı (11 gerçek Elazığ ilçesi + ~300 mahalle) SABİTTİR ve
-    `count`'tan bağımsızdır (bir ilin ilçe sayısı, o ildeki sokak sayısıyla
-    ORANTILI DEĞİLDİR — bu bilinçli bir modelleme kararıdır).
-
-    Dağılım (illustratif; gerçek TUCBS oranlarını temsil ETMEZ, sadece
-    pipeline'ı gerçekçi bir karışımla sınamak içindir):
-      - Ilce   : 11  (sabit)
-      - Mahalle: 300 (sabit; her biri rastgele bir ilçeye PART_OF bağlanır)
-      - Hastane: count'un ~%1'i (en az 1)
-      - Kopru  : count'un ~%10'u (en az 1)
-      - Sokak  : kalan (~%89) — böylece Sokak+Kopru+Hastane TAM OLARAK `count`
-        kadar olur; idari katman bunun ÜZERİNE eklenir.
-
-    İSİM BENZERSİZLİĞİ: Neo4j'e MERGE-by-isim mantığıyla yazıldığından (bkz.
-    `database.node_to_cypher`), her üretilen düğümün `isim`i BENZERSİZ olmak
-    ZORUNDADIR — aksi halde iki farklı sahte "sokak" yanlışlıkla TEK düğüme
-    birleşirdi. Bu yüzden HER isim, global olarak benzersiz artan bir sayaç
-    içerir (ör. "142. Sokak" — ki bu zaten gerçekçi bir Türkiye sokak adı
-    biçimidir); köprü/hastane isimlerindeki sayaç eki estetik değil, KESİN
-    doğruluk garantisi içindir.
-
-    `hiyerarsi_iliskileri_cikti` verilirse (boş bir liste), Mahalle düğümleri
-    üretilirken oluşan Mahalle -> İlçe (`PART_OF`) ilişkileri bu listeye YAN
-    ETKİ (side-effect) olarak eklenir — bağımsız bir ikinci rastgele üretimle
-    bu eşleşmeleri yeniden türetmek, iki ayrı rastgele akışın isim
-    eşleşmesini KAYBETME riski taşırdı; bu yüzden TEK geçimde toplanır. Bu
-    listeyi okumadan ÖNCE, döndürülen generator'ın TAMAMEN tüketilmiş
-    (`bulk_insert_nodes` ile işlenmiş) olması gerekir.
-    """
+   
     rastgele = random.Random(seed)
     guney, bati, kuzey, dogu = bbox
 
@@ -344,9 +202,8 @@ def generate_mock_tucbs_data(
     kopru_sayisi = max(1, round(count * 0.10))
     sokak_sayisi = max(1, count - hastane_sayisi - kopru_sayisi)
 
-    sayac = 0  # TUM uretilen dugumler icin GLOBAL benzersiz sayac (isim garantisi).
+    sayac = 0  
 
-    # --- 1) SABIT idari hiyerarsi katmani: Ilce ---
     ilce_dugumleri: List[AdministrativeArea] = []
     for ilce_adi in _ELAZIG_ILCELERI:
         sayac += 1
@@ -364,7 +221,6 @@ def generate_mock_tucbs_data(
         ilce_dugumleri.append(ilce)
         yield ilce
 
-    # --- 2) SABIT idari hiyerarsi katmani: Mahalle (+ PART_OF -> Ilce) ---
     for i in range(_MOCK_MAHALLE_SAYISI):
         sayac += 1
         ust_ilce = rastgele.choice(ilce_dugumleri)
@@ -387,7 +243,6 @@ def generate_mock_tucbs_data(
                 Relationship(kaynak_id=mahalle.isim, hedef_id=ust_ilce.isim, tip=RelationshipType.PART_OF)
             )
 
-    # --- 3) OLCEKLENEN katman: Sokak (count'un ~%89'u) ---
     for i in range(sokak_sayisi):
         sayac += 1
         enlem, boylam = rastgele.uniform(guney, kuzey), rastgele.uniform(bati, dogu)
@@ -408,7 +263,6 @@ def generate_mock_tucbs_data(
             zemin_tipi=rastgele.choice(list(SurfaceType)),
         )
 
-    # --- 4) OLCEKLENEN katman: Kopru (count'un ~%10'u) ---
     for i in range(kopru_sayisi):
         sayac += 1
         enlem, boylam = rastgele.uniform(guney, kuzey), rastgele.uniform(bati, dogu)
@@ -430,7 +284,6 @@ def generate_mock_tucbs_data(
             zemin_tipi=SurfaceType.BETON,
         )
 
-    # --- 5) OLCEKLENEN katman: Hastane (count'un ~%1'i) ---
     for i in range(hastane_sayisi):
         sayac += 1
         enlem, boylam = rastgele.uniform(guney, kuzey), rastgele.uniform(bati, dogu)
@@ -452,7 +305,7 @@ def generate_mock_tucbs_data(
     )
 
 
-def main() -> None:  # pragma: no cover - manuel/CLI calistirma amaclidir
+def main() -> None:  
     logging.basicConfig(level=logging.INFO)
 
     MOCK_KAYIT_SAYISI = 50_000
