@@ -1,37 +1,3 @@
-"""
-Kriz ve Afet Yönetimi Karar Destek Sistemi
-===========================================
-GERÇEK VERİ ÇALIŞTIRMA SCRIPTİ — Mock/sahte TUCBS verisini (bkz.
-`test_etl_pipeline.py`, `tucbs_etl_loader.generate_mock_tucbs_data`) BIRAKIP,
-OpenStreetMap Overpass API'sinden çekilen GERÇEK şehir topolojisini
-(`real_osm_loader.RealOsmLoader`) Neo4j Bilgi Grafı'na yükler.
-
-Akış:
-  1. Neo4j'e bağlan, veritabanını TAMAMEN sıfırla (`clear_database`) — önceki
-     sahte veri testinin PyDeck üzerinde anlamsız devasa bir kırmızı blok
-     oluşturan kalıntılarını temizler.
-  2. `RealOsmLoader.build_nodes()` ile Overpass'tan gerçek hastane/askeri
-     alan, itfaiye/polis (Facility/Unit) ve gerçek sokak/köprü (Street/
-     Bridge) düğümlerini üretir.
-  3. `TucbsETLLoader.bulk_insert_nodes` (UNWIND-batch) ile Neo4j'e yazar.
-  4. Sonuç sayaçlarını doğrudan veritabanı sorgusuyla teyit edip raporlar.
-
-FAZ 3 (ULUSAL ÖLÇEK — çoklu şehir, İDARİ ALAN sorgusu): Komut satırına
-il/şehir adları verilirse (`python run_real_data.py Elazığ Malatya
-Diyarbakır`), `RealOsmLoader` HER ili KENDİ GERÇEK idari alan sınırıyla
-(Overpass `area["name"=...]`, bbox YAKLAŞIKLIĞI DEĞİL) sırayla çeker ve
-yükler (bkz. `real_osm_loader.RealOsmLoader.sehirler`); argüman verilmezse
-varsayılan olarak SADECE Elazığ ilinin idari alanı yüklenir.
-
-⚠️  DİKKAT: Bu script, çalıştığı Neo4j veritabanındaki TÜM veriyi
-    (`clear_database`) GERİ ALINAMAZ şekilde SİLER. Overpass sorgusu, seçilen
-    bbox/highway kapsamına göre (ve kaç şehir verildiğine göre) birkaç
-    dakika sürebilir.
-
-Çalıştırmak için:
-    python run_real_data.py
-    python run_real_data.py Elazığ Malatya Diyarbakır
-"""
 
 from __future__ import annotations
 
@@ -44,11 +10,7 @@ from src.core.database import Neo4jConnection, Neo4jConnectionError
 from src.data_ingestion.real_osm_loader import RealOsmLoader
 from src.data_ingestion.tucbs_etl_loader import TucbsETLLoader
 
-# Windows konsolları genellikle UTF-8 DEĞİL, yerel bir kod sayfası (ör.
-# Türkçe Windows'ta cp1254) kullanır; bu betikteki emoji/ok ("→") gibi
-# ASCII-dışı karakterler o kod sayfasında TEMSİL EDİLEMEZ ve `print()`
-# `UnicodeEncodeError` ile ÇÖKER. `sys.stdout`/`sys.stderr`'i açıkça UTF-8'e
-# yeniden yapılandırmak (Python 3.7+ `TextIOWrapper.reconfigure`) bunu önler.
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -56,10 +18,6 @@ if hasattr(sys.stdout, "reconfigure"):
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
-# ---------------------------------------------------------------------------
-# Harici bagimlilik eklememek icin duz ANSI renk kodlari (bkz. test_etl_pipeline.py
-# ile AYNI desen — Windows Terminal / PowerShell 7 / modern konsollarda calisir).
-# ---------------------------------------------------------------------------
 
 
 class Renk:
@@ -93,7 +51,6 @@ def main() -> None:
         print(f"{Renk.KIRMIZI}{Renk.BOLD}✗ Neo4j'e bağlanılamadı: {exc}{Renk.BITIS}")
         sys.exit(1)
 
-    # --- ADIM 1: Veritabanini TAMAMEN sifirla ---
     print(f"\n{Renk.KIRMIZI}{Renk.BOLD}[1/3] Veritabanı TAMAMEN siliniyor (clear_database)...{Renk.BITIS}")
     db.clear_database()
     db.ensure_constraints()
@@ -101,7 +58,6 @@ def main() -> None:
         f"{Renk.YESIL}    → Veritabanı sıfırlandı (eski sahte-veri/HexagonLayer kalıntıları temizlendi).{Renk.BITIS}"
     )
 
-    # --- ADIM 2: Overpass'tan gercek veri cek + UNWIND-batch ile yaz ---
     print(
         f"\n{Renk.MAVI}{Renk.BOLD}[2/3] Overpass API'den {hedef_baslik} GERÇEK şehir topolojisi "
         f"çekiliyor ve Neo4j'e yazılıyor...{Renk.BITIS}"
@@ -113,11 +69,7 @@ def main() -> None:
     )
     print(f"    İl/Şehir(ler): {loader.sehirler}")
     sayac_detay: Dict[str, int] = {}
-    # BÖLGESEL HATA İZOLASYONU (bkz. `real_osm_loader.RealOsmLoader.build_nodes`):
-    # 81 il gibi UZUN bir listede tek bir ilin geçici bir Overpass hatası
-    # ARTIK tüm çalıştırmayı ÇÖKERTMEZ — o il atlanır, DİĞERLERİ yazılmaya
-    # devam eder; hangi illerin atlandığı burada toplanıp SONUÇ RAPORU'nda
-    # açıkça listelenir.
+   
     basarisiz_bolgeler: List[Tuple[str, str]] = []
     t0 = time.perf_counter()
     try:
@@ -129,7 +81,6 @@ def main() -> None:
         sys.exit(1)
     sure = time.perf_counter() - t0
 
-    # --- ADIM 3: Veritabanina dogrudan sorgu atarak dogrula ve raporla ---
     print(f"\n{Renk.MAVI}{Renk.BOLD}[3/3] Veritabanı sorgulanarak doğrulanıyor...{Renk.BITIS}")
     gercek_toplam_dugum = db.execute_query("MATCH (n) RETURN count(n) AS adet")[0]["adet"]
     etiket_dagilimi = db.execute_query(
@@ -166,11 +117,7 @@ def main() -> None:
             f"python run_real_data.py {' '.join(il for il, _ in basarisiz_bolgeler)}{Renk.BITIS}"
         )
 
-    # KRITIK DOGRULAMA (sorun #1: sessizce "basarili" gorunup 0 kayit
-    # yuklenmesi): `RealOsmLoader.fetch_raw_elements` zaten 0 ham eleman icin
-    # RuntimeError firlatir, ama savunmaci bir SON kontrol olarak burada da
-    # gercek veritabani sayimi acikca dogrulanir; script ASLA 0 dugumle
-    # "basarili" (yesil, exit 0) rapor vermez.
+   
     if gercek_toplam_dugum == 0:
         print(
             f"\n{Renk.KIRMIZI}{Renk.BOLD}✗ BAŞARISIZ: Overpass sorgusu tamamlandı ama Neo4j'e "
